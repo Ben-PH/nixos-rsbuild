@@ -28,6 +28,8 @@
         nixos-rsbuild = final.callPackage ./package.nix { };
       };
 
+      nixosModules.default = ./module.nix;
+
       formatter = forSystems (system: nixpkgs.legacyPackages.${system}.nixfmt-rfc-style);
     };
 }
