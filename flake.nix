@@ -3,13 +3,19 @@
 
   inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
 
-  outputs = { self, nixpkgs, ... }:
+  outputs =
+    { self, nixpkgs, ... }:
     let
-      forSystems = nixpkgs.lib.genAttrs [ "x86_64-linux" ]; # Add more when actullay testing for those architecutres
       rev = toString (self.shortRev or self.dirtyShortRev or self.lastModifiedDate or "unknown");
+
+      # ToDo: Add more when actually testing for those architectures
+      supportedSystems = [ "x86_64-linux" ];
+
+      forSystems = nixpkgs.lib.genAttrs supportedSystems;
     in
     {
-      packages = forSystems (system:
+      packages = forSystems (
+        system:
         let
           pkgs = nixpkgs.legacyPackages.${system};
         in
@@ -17,5 +23,11 @@
           default = pkgs.callPackage ./package.nix { inherit rev; };
         }
       );
+
+      overlays.default = final: prev: {
+        nixos-rsbuild = final.callPackage ./package.nix { };
+      };
+
+      formatter = forSystems (system: nixpkgs.legacyPackages.${system}.nixfmt-rfc-style);
     };
 }
