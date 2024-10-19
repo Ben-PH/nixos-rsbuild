@@ -1,35 +1,21 @@
 {
-  description = "Base flake for rust project";
+  description = "A slightly opinionated RIIR of the nixos-rebuild CLI-tool";
 
-  inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
-    rust-overlay = {
-      url = "github:oxalica/rust-overlay";
-      inputs.nixpkgs.follows = "nixpkgs";
+  inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
+
+  outputs = { self, nixpkgs, ... }:
+    let
+      forSystems = nixpkgs.lib.genAttrs [ "x86_64-linux" ]; # Add more when actullay testing for those architecutres
+      rev = toString (self.shortRev or self.dirtyShortRev or self.lastModifiedDate or "unknown");
+    in
+    {
+      packages = forSystems (system:
+        let
+          pkgs = nixpkgs.legacyPackages.${system};
+        in
+        {
+          default = pkgs.callPackage ./package.nix { inherit rev; };
+        }
+      );
     };
-    flake-utils.url  = "github:numtide/flake-utils";
-  };
-
-  outputs = { self, nixpkgs, rust-overlay, flake-utils, ... }:
-    flake-utils.lib.eachDefaultSystem (system:
-      let
-        overlays = [ (import rust-overlay) ];
-        pkgs = import nixpkgs {
-          inherit system overlays;
-        };
-      in
-      with pkgs;
-      {
-        devShells.default = mkShell {
-          buildInputs = [
-            rust-bin.stable.latest.default
-          ];
-
-          shellHook = ''
-            echo "in rust dev shell";
-          '';
-        };
-      }
-    );
 }
-
