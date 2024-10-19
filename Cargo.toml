@@ -4,6 +4,7 @@ version = "0.1.0"
 authors = ["Ben Pieters-Hawke <benphawke@gmail.com>"]
 description = """
 `nixos-rsbuild` is a (slightly opinionated) rewrite of the `nixos-rebuild` cli utility. The goals are as follows
+
  - minimal barrier-of-entry to read/write the codebase in a meaningful way
  - provide a pleasant documentation/help UX
  - showcase Rust as an implementation tool in the nix/nixos ecosystem

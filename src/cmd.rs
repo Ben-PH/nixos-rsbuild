@@ -109,6 +109,7 @@ pub enum SubCommand {
 
 #[derive(Args, Debug)]
 pub struct RbFlag {
+    #[clap(long)]
     rollback: bool,
 }
 #[derive(Args, Debug)]
