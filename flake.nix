@@ -20,7 +20,8 @@
           pkgs = nixpkgs.legacyPackages.${system};
         in
         {
-          default = pkgs.callPackage ./package.nix { inherit rev; };
+          default =  self.outputs.packages.${system}.nixos-rsbuild;
+          nixos-rsbuild = pkgs.callPackage ./package.nix { inherit rev; };
         }
       );
 
