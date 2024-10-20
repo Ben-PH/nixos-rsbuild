@@ -1,9 +1,11 @@
 [package]
 name = "nixos-rsbuild"
 version = "0.1.0"
-authors = ["Ben Pieters-Hawke <benphawke@gmail.com>"]
+authors = [ "Ben Pieters-Hawke <benphawke@gmail.com>" ]
 description = """
-`nixos-rsbuild` is a (slightly opinionated) rewrite of the `nixos-rebuild` cli utility. The goals are as follows
+`nixos-rsbuild` is a (slightly opinionated) rewrite of the `nixos-rebuild` CLI-utility.
+
+The goals are as follows:
 
  - minimal barrier-of-entry to read/write the codebase in a meaningful way
  - provide a pleasant documentation/help UX
@@ -12,8 +14,8 @@ description = """
  - (Stretch): Cover all supported use-cases of `nixos-rebuild`
 """
 edition = "2021"
-keywords = ["nixos", "nix"]
-catagories = ["command-line-utilitios"]
+keywords = [ "nixos", "nix" ]
+catagories = [ "command-line-utilities" ]
 license = "Unlicense OR MIT"
 
 
