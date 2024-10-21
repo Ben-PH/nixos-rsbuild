@@ -1,13 +1,16 @@
 use crate::{cmd::SubCommand, run_cmd};
 use camino::Utf8PathBuf;
 use std::{
-    ffi::OsString, io, path::{Path, PathBuf}, process::Command as CliCommand
+    ffi::OsString,
+    io,
+    path::{Path, PathBuf},
+    process::Command as CliCommand,
 };
 const NIX_ARGS: [&str; 2] = ["--extra-experimental-features", "'nix-command flakes'"];
 const DEFAULT_FLAKE_NIX: &str = "/etc/nixos/flake.nix";
 /// Destructured `<flake_dir>[#attribute]`
 #[derive(Debug, Clone)]
-pub struct FlakeUrl {
+pub struct FlakeRef {
     /// Pre-`#` component.
     /// Path to the dir where a flake.nix will be searched
     pub source: PathBuf,
@@ -15,7 +18,7 @@ pub struct FlakeUrl {
     pub output_selector: Option<FlakeAttr>,
 }
 
-impl FlakeUrl {
+impl FlakeRef {
     /// Checks if /etc/nixos has a flake.nix, or the canonicalised if need be
     pub fn canonned_default_dir() -> Option<PathBuf> {
         // Default path
@@ -31,7 +34,10 @@ impl FlakeUrl {
     }
     pub fn _canonicalise_path(&mut self) {
         log::trace!("cononicalising path: {}", self.source.display());
-        log::warn!("Attempting to canonicalise {}: this is untested", self.source.display());
+        log::warn!(
+            "Attempting to canonicalise {}: this is untested",
+            self.source.display()
+        );
         if let Ok(path) = std::fs::canonicalize(&self.source) {
             if path.is_file() {
                 log::error!("Internal error: canonicalised a source to a file");
@@ -42,26 +48,32 @@ impl FlakeUrl {
             }
         }
     }
-
 }
 
 /// Takes a string and maps it to a flake url
-impl TryFrom<&str> for FlakeUrl {
+impl TryFrom<&str> for FlakeRef {
     type Error = String;
 
     fn try_from(value: &str) -> Result<Self, Self::Error> {
+        // no '#'? we just have the source, no selected attr
         let Some(fst_hash) = value.find('#') else {
-            return Ok(FlakeUrl {
+            return Ok(FlakeRef {
                 source: Path::new(value).to_path_buf(),
                 output_selector: None,
             });
         };
+
+        // split "foo#path.to.bar" into ["foo", "path.to.bar"]
         let (path, hsh_attr) = value.split_at(fst_hash);
         let stripped_attr = &hsh_attr[1..];
+
+        // parse "bar" into `FlakeAttr(["path","to", "bar"])`
         let Ok(attr) = FlakeAttr::try_from(stripped_attr.to_string()) else {
             return Err(value.to_string());
         };
-        Ok(FlakeUrl {
+
+        // jobs-done!
+        Ok(FlakeRef {
             source: PathBuf::from(path),
             output_selector: Some(attr),
         })
@@ -76,7 +88,6 @@ pub struct FlakeAttr {
     attr_path: Vec<String>,
 }
 
-
 /// "" -> Error
 /// "contains"double.quote" -> Error
 /// "contains#hash" -> Error
@@ -88,7 +99,7 @@ impl TryFrom<String> for FlakeAttr {
     fn try_from(value: String) -> Result<Self, Self::Error> {
         if value.contains('#') || value.contains('"') || value.is_empty() {
             log::trace!("malformed attr: {}", value);
-            return Err(value)
+            return Err(value);
         }
         Ok(FlakeAttr {
             attr_path: value.split('.').map(ToString::to_string).collect(),
@@ -117,7 +128,6 @@ impl Default for FlakeAttr {
         }
     }
 }
-
 
 pub fn flake_build_config(sub_cmd: &SubCommand, args: &[&str]) -> io::Result<Utf8PathBuf> {
     println!("Building in flake mode.");

@@ -3,8 +3,7 @@ use std::path::{Path, PathBuf};
 use camino::Utf8PathBuf;
 use clap::{Args, Parser, Subcommand};
 
-use crate::flake::FlakeUrl;
-
+use crate::flake::FlakeRef;
 
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
@@ -142,7 +141,7 @@ pub struct AllArgs {
     /// that file exists...
     #[clap(long, conflicts_with_all(["file", "attr", "no_flake"]))]
     #[arg(value_parser = flake_parse)]
-    pub flake: Option<FlakeUrl>,
+    pub flake: Option<FlakeRef>,
     #[clap(long)]
     pub no_flake: bool,
 
@@ -173,8 +172,8 @@ pub struct AllArgs {
 
 // TODO: this is needed for bringing in a value parser. if you can access `try_from` directly, do
 // that instead
-fn flake_parse(val: &str) -> Result<FlakeUrl, String> {
-    FlakeUrl::try_from(val)
+fn flake_parse(val: &str) -> Result<FlakeRef, String> {
+    FlakeRef::try_from(val)
 }
 
 #[derive(Args, Debug)]
@@ -312,16 +311,18 @@ impl SubCommand {
         log::trace!("no flake set: attempting to derive default...");
 
         // Happy to flake, no flake set: Map in the flake if it exists
-        let Some(path) = FlakeUrl::canonned_default_dir() else {
+        let Some(path) = FlakeRef::canonned_default_dir() else {
             log::trace!("Could not find a flake: no flake set");
             return;
         };
         log::trace!("Derived flake path: {}", path.display());
         // We pulled out a default flake, now let's get its attr
         let attr = Some(crate::flake::FlakeAttr::default());
-        let new_flake = FlakeUrl { source: path, output_selector: attr };
+        let new_flake = FlakeRef {
+            source: path,
+            output_selector: attr,
+        };
         log::trace!("Setting new flake: {:?}", new_flake);
-
 
         *flake = Some(new_flake);
     }

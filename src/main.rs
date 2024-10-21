@@ -4,10 +4,13 @@
 use clap::Parser;
 use cmd::{AllArgs, Cli, SubCommand};
 use std::{
-    error::Error, io::{self, Write}, process::{Command as CliCommand, Output}
+    error::Error,
+    io::{self, Write},
+    process::{Command as CliCommand, Output},
 };
 mod cmd;
 mod flake;
+mod list_generations;
 
 fn main() -> Result<(), Box<dyn Error>> {
     let cli = initial_init()?;
@@ -19,6 +22,12 @@ fn main() -> Result<(), Box<dyn Error>> {
         log::trace!("flake-build-res: {:?}", res);
     }
 
+    //
+    if matches!(cli, SubCommand::ListGenerations { .. }) {
+        list_generations::list_generations();
+        return Ok(());
+    }
+
     // TODO: wrap and impl drop. The referenced impl does an ssh drop
     let tmpdir = tempfile::TempDir::with_prefix("nixos-rsbuild")?;
     log::trace!("using tmpdir: {}", tmpdir.path().display());
@@ -27,10 +36,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let reexec_env = std::env::var("_NIXOS_REBUILD_REEXEC").unwrap_or_default();
     if reexec_env.is_empty()
         && cli.can_run()
-        && matches!(
-            cli.inner_args(),
-            Some(AllArgs { fast: false, .. })
-        )
+        && matches!(cli.inner_args(), Some(AllArgs { fast: false, .. }))
     {
         todo!("handle the reexec context")
     }
@@ -42,7 +48,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 /// Ensures not run as root
 /// Initialises logger
 /// Parses cli, returning the subcommand of the result
-fn initial_init() -> Result<SubCommand, Box<dyn Error>> { 
+fn initial_init() -> Result<SubCommand, Box<dyn Error>> {
     if nix::unistd::Uid::current().is_root() {
         // TODO: this pre-empts automation. something to think about
         return Err("This program should not be run as root!".into());
@@ -59,15 +65,16 @@ fn initial_init() -> Result<SubCommand, Box<dyn Error>> {
     // initialise logger
     env_logger::Builder::new()
         .format(|buf, rec| {
-    writeln!(
-    buf,
-        "{}:{} [{}]\t{}",
-            rec.file().unwrap_or("unknown"),
-        rec.line().unwrap_or(0),
-        rec.level(),
-        rec.args()
-    )})
-        .filter_level(log::LevelFilter::Trace)
+            writeln!(
+                buf,
+                "{}:{} [{}]\t{}",
+                rec.file().unwrap_or("unknown"),
+                rec.line().unwrap_or(0),
+                rec.level(),
+                rec.args()
+            )
+        })
+        .filter_level(log::LevelFilter::Debug)
         .init();
 
     // parse out cli args into a structured encapsulation
@@ -87,4 +94,3 @@ fn run_cmd(cmd: &mut CliCommand) -> io::Result<Output> {
     log::trace!("RES: {:?}", res);
     res
 }
-
