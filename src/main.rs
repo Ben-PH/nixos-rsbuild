@@ -4,6 +4,7 @@
 use clap::Parser;
 use cmd::{AllArgs, Cli, SubCommand};
 use std::{
+    collections::BTreeMap,
     error::Error,
     io::{self, Write},
     process::{Command as CliCommand, Output},
@@ -24,7 +25,9 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     //
     if matches!(cli, SubCommand::ListGenerations { .. }) {
-        list_generations::list_generations();
+        let meta =
+            list_generations::GenerationMeta::get_generation_meta()?.collect::<BTreeMap<_, _>>();
+        println!("{:#?}", meta);
         return Ok(());
     }
 
