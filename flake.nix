@@ -20,7 +20,19 @@
           pkgs = nixpkgs.legacyPackages.${system};
         in
         {
-          default = pkgs.callPackage ./package.nix { inherit rev; };
+          default = self.outputs.packages.${system}.nixos-rsbuild;
+          nixos-rsbuild = pkgs.callPackage ./package.nix { inherit rev; };
+        }
+      );
+
+      devShells = forSystems (
+        system:
+        let
+          pkgs = nixpkgs.legacyPackages.${system};
+        in
+        {
+          default = self.outputs.devShells.${system}.minimal;
+          minimal = import ./shell.nix { inherit pkgs; };
         }
       );
 
