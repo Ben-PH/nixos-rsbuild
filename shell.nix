@@ -4,13 +4,15 @@
 pkgs.mkShell {
   packages = with pkgs; [
     cargo rustc
-    rust-analyzer rustfmt
+    rust-analyzer
+    rustfmt
     clippy
-    # pkg-config openssl
+    # pkg-config
+    # openssl
   ];
 
   env = {
-    RUST_BACKTRACE = "full";
+    # RUST_BACKTRACE = "full";
     # RUST_SRC_PATH = "";
   };
 

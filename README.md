@@ -32,7 +32,7 @@ If you are reading this, you are probably a Nix/NixOS nerd. If you are curious a
 
 NOTE: `<flake-uri>` => `/path/to/dir#flake.attr`
 
-1. [ ] `nixos-rsbuild list-generations [--json]`
+1. [x] `nixos-rsbuild list-generations [--json]`
 2. [ ] `nixos-rebuild boot --flake <flake-uri>` -> `nixos-rs boot <flake-uri>`
 3. [ ] `nixos-rebuild boot` -> `nixos-rsbuild boot --config`
 4. [ ] `nixos-rebuild test ...` -> `nixos-rsbuild test ...`
