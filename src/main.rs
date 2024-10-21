@@ -23,7 +23,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         log::trace!("flake-build-res: {:?}", res);
     }
 
-    //
+    // Get generation meta-iterator
     if matches!(cli, SubCommand::ListGenerations { .. }) {
         let meta =
             list_generations::GenerationMeta::get_generation_meta()?.collect::<BTreeMap<_, _>>();

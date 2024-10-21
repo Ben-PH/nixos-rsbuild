@@ -65,7 +65,7 @@ pub struct GenerationMeta {
     specialisation: Vec<String>,
 }
 #[derive(Debug, Serialize)]
-pub struct NumberedGenDesc {
+pub struct NumberedGenMeta {
     #[serde(flatten)]
     num: GenNumber,
     #[serde(flatten)]
@@ -92,7 +92,7 @@ impl Serialize for GenDescTable {
     }
 }
 
-impl From<(u32, GenerationMeta)> for NumberedGenDesc {
+impl From<(u32, GenerationMeta)> for NumberedGenMeta {
     fn from(value: (u32, GenerationMeta)) -> Self {
         Self {
             num: value.0.into(),
@@ -107,6 +107,9 @@ impl TryFrom<&Path> for GenerationMeta {
     type Error = String;
 
     fn try_from(gen_dir: &Path) -> Result<Self, Self::Error> {
+        let Ok(_cannoned_dir) = file_utils::CanonedStorePath::try_from(gen_dir) else {
+            return Err(format!("Could not canonicalise {}", gen_dir.display()));
+        };
         let gen_number = GenNumber::try_from(gen_dir)?;
         log::trace!("gen-number {}", gen_number.num);
 
@@ -143,6 +146,8 @@ impl TryFrom<&Path> for GenerationMeta {
 }
 
 impl GenerationMeta {
+    /// An iterator over (number, generation-meta) pairs. Usually `.collect::<_>()`ed into an
+    /// ordered key/value data struct such as a `BTreeMap`.
     pub fn get_generation_meta() -> io::Result<impl Iterator<Item = (GenNumber, Self)>> {
         let gen_dir_root = Path::new(GEN_DIR);
 
@@ -193,12 +198,84 @@ impl GenerationMeta {
 // General file utilities
 mod file_utils {
     use std::{
+        ffi::{OsStr, OsString},
         fs::File,
         io::{self, BufRead},
-        path::Path,
+        path::{Path, PathBuf},
     };
 
     use chrono::{DateTime, Utc};
+
+    enum StoreEntryType {
+        Directory,
+        ExtDrv,
+        ExtMissing,
+        ExtOther(OsString),
+    }
+    /// <https://nix.dev/manual/nix/2.24/protocols/store-path#store-path-proper>
+    /// `/nix/store/<digest>-<name>`
+    pub(super) struct CanonedStorePath {
+        /// the 32-char string is the base32 encoding of the first 20bytes. We store the decoded
+        /// bytes instead of the string.
+        /// TODO: actually decode back to the 20 bytes...
+        digest: String,
+        name: String,
+        entry_type: StoreEntryType,
+    }
+
+    impl TryFrom<&Path> for CanonedStorePath {
+        type Error = io::Error;
+
+        fn try_from(value: &Path) -> Result<Self, Self::Error> {
+            let cannoned = std::fs::canonicalize(value)?;
+
+            // Pull out the file/dirname, sanatising it's not `..`, and is a valid string
+            let fname = {
+                let fname = cannoned.file_name();
+                fname
+                    .ok_or(io::Error::new(
+                        io::ErrorKind::Other,
+                        "canonicalised to `..` for some reason",
+                    ))?
+                    .to_str()
+                    .ok_or(io::Error::new(
+                        io::ErrorKind::Other,
+                        "canonicalised to `..` for some reason",
+                    ))
+            }?;
+
+            if fname.find('-') != Some(32) {
+                return Err(io::Error::new(
+                    io::ErrorKind::Other,
+                    "expected <[char; 32]>-<name>. `-` not found at idx 32",
+                ));
+            }
+
+            let entry_type = if cannoned.is_dir() {
+                StoreEntryType::Directory
+            } else {
+                match cannoned.extension().and_then(OsStr::to_str) {
+                    Some("drv") => StoreEntryType::ExtDrv,
+                    Some(d) => StoreEntryType::ExtOther(d.into()),
+                    None => StoreEntryType::ExtMissing,
+                }
+            };
+
+            let (digest, name) = fname.split_at(32);
+            let name = name[1..].to_string();
+            Ok(Self {
+                digest: digest.to_string(),
+                name,
+                entry_type,
+            })
+        }
+    }
+
+    impl From<&CanonedStorePath> for PathBuf {
+        fn from(value: &CanonedStorePath) -> Self {
+            PathBuf::from(format!("/nix/store/{}-{}", value.digest, value.name))
+        }
+    }
 
     pub(super) fn read_fst_line(file_path: &Path) -> io::Result<String> {
         let mut reader = io::BufReader::new(File::open(file_path)?);
