@@ -228,6 +228,9 @@ fn file_exists(path: &str) -> Result<Utf8PathBuf, String> {
 }
 
 impl SubCommand {
+    pub fn flake_ref_mut(&mut self) -> Option<&mut FlakeRefInput> {
+        self.inner_args_mut().map(|args| &mut args.flake)
+    }
     /// all but list-gens contains `AllArgs`.
     /// If this is already known not to be a ``ListGenerations`` run, you can unwrap this no problem.
     /// ...And that should be a flag to clean up the arg architecture, no?
@@ -303,8 +306,6 @@ impl SubCommand {
         };
         log::trace!("Happy to flake...");
 
-
-        
         // Happy to flake, no flake set: Map in the flake if it exists
         let Some(path) = flake.canoned_dir() else {
             return;

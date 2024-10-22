@@ -16,7 +16,7 @@ mod list_generations;
 pub mod utils;
 
 fn main() -> Result<(), Box<dyn Error>> {
-    let cli = initial_init()?;
+    let mut cli = initial_init()?;
 
     if let Some(gen_meta) = GenerationMeta::dispatch_cmd(&cli) {
         let gens_iter = gen_meta?;
@@ -30,9 +30,12 @@ fn main() -> Result<(), Box<dyn Error>> {
     }) = cli.inner_args()
     {
         log::trace!("running flake-build");
-        let res = flake::flake_build_config(&cli, &[]);
-
-        log::trace!("flake-build-res: {:?}", res);
+        if let Some(ref mut flake_input) = cli.flake_ref_mut() {
+            // let path = flake_input.canoned_dir();
+            let flake = flake_input.clone().init_flake_ref();
+            log::trace!("flake-build-res: {:?}", flake);
+        }
+        return Ok(());
     }
 
     // TODO: wrap and impl drop. The referenced impl does an ssh drop

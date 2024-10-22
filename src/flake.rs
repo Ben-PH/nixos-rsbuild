@@ -26,7 +26,7 @@ pub struct FlakeRef {
     /// Path to the dir where a flake.nix will be searched
     pub source: PathBuf,
     /// Post-`#` component
-    pub output_selector: Option<FlakeAttr>,
+    pub output_selector: FlakeAttr,
 }
 
 impl FlakeRefInput {
@@ -43,34 +43,42 @@ impl FlakeRefInput {
     /// - No `/etc/nixos/flake.nix` present
     ///
     /// TODO: Error-out if derived hostname is not present in `nixosConfigurations`
-    pub fn init_flake_Ref(mut self) -> Result<FlakeRef, Self> {
-        log::debug!("initialisation unimplemented");
-        Err(self)
+    pub fn init_flake_ref(mut self) -> Result<FlakeRef, Self> {
+        let Some(path) = self.canoned_dir() else {
+            return Err(self);
+        };
+        let mut attr = self.output_selector.unwrap_or_default();
+        attr.route_to_toplevel();
+
+        Ok(FlakeRef {
+            source: path,
+            output_selector: attr,
+        })
     }
 
     /// where `realpath /etc/nixos/flake.nix` resolves to a `flake.nix` file, provides the path to
     /// the directory
     pub fn canoned_default_dir() -> Option<PathBuf> {
-            match std::fs::canonicalize("/etc/nixos/flake.nix") {
-                Ok(c) => {
-                    if c.is_dir() {
-                        log::error!("Canonical path from default flake.nix should resolve to a flake.nix. Resolved to: {}", c.display());
-                        return None;
-                    } else if c
-                        .file_name()
-                        .expect("somehow symlink of default flake.nix resolved to `..`")
-                        != OsStr::new("flake.nix")
-                    {
-                        log::error!("Canonical path from default flake.nix resolved to file other than `flake.nix`: {}", c.display());
-                        return None;
-                    }
-                    return Some(c);
-                }
-                Err(e) => {
-                    log::error!("Error canonicalising default flake-path: {}", e);
+        match std::fs::canonicalize("/etc/nixos/flake.nix") {
+            Ok(c) => {
+                if c.is_dir() {
+                    log::error!("Canonical path from default flake.nix should resolve to a flake.nix. Resolved to: {}", c.display());
+                    return None;
+                } else if c
+                    .file_name()
+                    .expect("somehow symlink of default flake.nix resolved to `..`")
+                    != OsStr::new("flake.nix")
+                {
+                    log::error!("Canonical path from default flake.nix resolved to file other than `flake.nix`: {}", c.display());
                     return None;
                 }
+                return Some(c);
             }
+            Err(e) => {
+                log::error!("Error canonicalising default flake-path: {}", e);
+                return None;
+            }
+        }
     }
     /// Resolves symbolic links in flakeref path:
     /// path is not a dir: None
@@ -90,14 +98,18 @@ impl FlakeRefInput {
         }
 
         let flake_loc = input_path.join("flake.nix");
-        let flake_exists = match std::fs::exists(&flake_loc)  {
+        let flake_exists = match std::fs::exists(&flake_loc) {
             Ok(exists) => exists,
             Err(e) => {
-                log::error!("Error when checking for existence of flake at {}: {}", flake_loc.display(), e);
+                log::error!(
+                    "Error when checking for existence of flake at {}: {}",
+                    flake_loc.display(),
+                    e
+                );
                 return None;
             }
         };
-    
+
         if !flake_exists {
             log::error!("flake-path must be a directory containing `flake.nix`.");
             return None;
@@ -111,17 +123,28 @@ impl FlakeRefInput {
             }
         };
         if canoned_path.is_dir() {
-                log::error!("Sym-link from {} must resolve to `flake.nix`. Resolved to a directory: {}", flake_loc.display(), canoned_path.display());
-                return None;
+            log::error!(
+                "Sym-link from {} must resolve to `flake.nix`. Resolved to a directory: {}",
+                flake_loc.display(),
+                canoned_path.display()
+            );
+            return None;
         }
         if canoned_path.file_name() != Some(OsStr::new("flake.nix")) {
-                log::error!("Sym-link from {} must resolve to a `flake.nix`. Resolved to: {}", flake_loc.display(), canoned_path.display());
-                return None;
+            log::error!(
+                "Sym-link from {} must resolve to a `flake.nix`. Resolved to: {}",
+                flake_loc.display(),
+                canoned_path.display()
+            );
+            return None;
         }
 
         let res = canoned_path.parent().map(Path::to_path_buf);
         if res.is_none() {
-            log::error!("Could not resolve directory from {}", canoned_path.display())
+            log::error!(
+                "Could not resolve directory from {}",
+                canoned_path.display()
+            )
         }
 
         res
