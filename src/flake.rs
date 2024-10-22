@@ -2,6 +2,7 @@ use crate::{cmd::SubCommand, run_cmd};
 use camino::Utf8PathBuf;
 use std::{
     ffi::{OsStr, OsString},
+    fmt::Display,
     io,
     path::{Path, PathBuf},
     process::Command as CliCommand,
@@ -16,9 +17,19 @@ const DEFAULT_FLAKE_NIX: &str = "/etc/nixos/flake.nix";
 pub struct FlakeRefInput {
     /// Pre-`#` component.
     /// Path to the dir where a flake.nix will be searched
-    pub source: Option<PathBuf>,
+    pub source: PathBuf,
     /// Post-`#` component
     pub output_selector: Option<FlakeAttr>,
+}
+impl Display for FlakeRefInput {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let attr_path = self
+            .output_selector
+            .as_ref()
+            .map(|a| format!("#{}", a))
+            .unwrap_or_default();
+        write!(f, "{}{}", self.source.display(), attr_path)
+    }
 }
 #[derive(Debug, Clone)]
 pub struct FlakeRef {
@@ -27,6 +38,20 @@ pub struct FlakeRef {
     pub source: PathBuf,
     /// Post-`#` component
     pub output_selector: FlakeAttr,
+}
+impl Display for FlakeRef {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}#{}", self.source.display(), self.output_selector)
+    }
+}
+
+impl Default for FlakeRefInput {
+    fn default() -> Self {
+        Self {
+            source: PathBuf::from("/etc/nixos/"),
+            output_selector: Some(FlakeAttr::default()),
+        }
+    }
 }
 
 impl FlakeRefInput {
@@ -43,14 +68,15 @@ impl FlakeRefInput {
     /// - No `/etc/nixos/flake.nix` present
     ///
     /// TODO: Error-out if derived hostname is not present in `nixosConfigurations`
-    pub fn init_flake_ref(mut self) -> Result<FlakeRef, Self> {
+    pub fn init_flake_ref(&self) -> Option<FlakeRef> {
         let Some(path) = self.canoned_dir() else {
-            return Err(self);
+            log::error!("failed in finding path");
+            return None;
         };
-        let mut attr = self.output_selector.unwrap_or_default();
+        let mut attr = self.output_selector.clone().unwrap_or_default();
         attr.route_to_toplevel();
 
-        Ok(FlakeRef {
+        Some(FlakeRef {
             source: path,
             output_selector: attr,
         })
@@ -87,17 +113,12 @@ impl FlakeRefInput {
     /// cantained flake.nix sym-links to anything other than regular file named `flake.nix`: None
     /// contained flake.nix links to regular file named `flake.nix`: said files parent directory
     pub fn canoned_dir(&self) -> Option<PathBuf> {
-        let Some(input_path) = &self.source else {
-            // get dir of default flake, resolving sym-links as needed
-            return Self::canoned_default_dir();
-        };
-
-        if !input_path.is_dir() {
-            log::error!("Expected directory, got file: {}", input_path.display());
+        if !self.source.is_dir() {
+            log::error!("Expected directory, got file: {}", self.source.display());
             return None;
         }
 
-        let flake_loc = input_path.join("flake.nix");
+        let flake_loc = self.source.join("flake.nix");
         let flake_exists = match std::fs::exists(&flake_loc) {
             Ok(exists) => exists,
             Err(e) => {
@@ -159,7 +180,7 @@ impl TryFrom<&str> for FlakeRefInput {
         // no '#'? we just have the source, no selected attr
         let Some(fst_hash) = value.find('#') else {
             return Ok(FlakeRefInput {
-                source: Some(Path::new(value).to_path_buf()),
+                source: Path::new(value).to_path_buf(),
                 output_selector: None,
             });
         };
@@ -175,7 +196,7 @@ impl TryFrom<&str> for FlakeRefInput {
 
         // jobs-done!
         Ok(FlakeRefInput {
-            source: Some(PathBuf::from(path)),
+            source: PathBuf::from(path),
             output_selector: Some(attr),
         })
     }

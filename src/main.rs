@@ -16,25 +16,32 @@ mod list_generations;
 pub mod utils;
 
 fn main() -> Result<(), Box<dyn Error>> {
-    let mut cli = initial_init()?;
+    let cli = initial_init()?;
 
+    // list generations
     if let Some(gen_meta) = GenerationMeta::dispatch_cmd(&cli) {
         let gens_iter = gen_meta?;
         println!("{:#?}", gens_iter.collect::<BTreeMap<_, _>>());
         return Ok(());
     }
 
-    // Default to using flakes...
-    if let Some(AllArgs {
-        no_flake: false, ..
-    }) = cli.inner_args()
+    // plain flake build
+    if let SubCommand::Build {
+        all: AllArgs {
+            flake,
+            no_flake: false,
+            ..
+        },
+        ..
+    } = cli
     {
-        log::trace!("running flake-build");
-        if let Some(ref mut flake_input) = cli.flake_ref_mut() {
-            // let path = flake_input.canoned_dir();
-            let flake = flake_input.clone().init_flake_ref();
-            log::trace!("flake-build-res: {:?}", flake);
-        }
+        log::trace!("getting full flake");
+        let full_flake = flake.init_flake_ref();
+        let _ = run_cmd(
+            CliCommand::new("nom")
+                .arg("build")
+                .arg(format!("{}", full_flake.unwrap())),
+        );
         return Ok(());
     }
 
@@ -91,7 +98,7 @@ fn initial_init() -> Result<SubCommand, Box<dyn Error>> {
     let cli = {
         let mut mut_cli = Cli::parse_from(args);
         log::trace!("parsed cli: {:?}", mut_cli);
-        mut_cli.command.try_init_to_default_flake();
+        // mut_cli.command.try_init_to_default_flake();
         mut_cli
     };
     Ok(cli.command)
@@ -101,8 +108,6 @@ fn initial_init() -> Result<SubCommand, Box<dyn Error>> {
 fn run_cmd(cmd: &mut CliCommand) -> io::Result<Output> {
     log::trace!("RUN: {:?}", cmd);
     let res = cmd.spawn().expect("failed to start").wait_with_output();
-
-    panic!();
     log::trace!("RES: {:?}", res);
     res
 }

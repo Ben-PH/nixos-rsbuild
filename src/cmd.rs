@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 use camino::Utf8PathBuf;
 use clap::{Args, Parser, Subcommand};
 
-use crate::flake::FlakeRefInput;
+use crate::flake::{FlakeRef, FlakeRefInput};
 
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
@@ -140,7 +140,7 @@ pub struct AllArgs {
     /// TODO: if both flake and no-flake are unset, set flake to /etc/nixos/flake.nix, but only if
     /// that file exists...
     #[clap(long, conflicts_with_all(["file", "attr", "no_flake"]))]
-    #[arg(value_parser = flake_parse)]
+    #[arg(value_parser = flake_parse, default_value_t = FlakeRefInput::default())]
     pub flake: FlakeRefInput,
     #[clap(long)]
     pub no_flake: bool,
@@ -228,9 +228,6 @@ fn file_exists(path: &str) -> Result<Utf8PathBuf, String> {
 }
 
 impl SubCommand {
-    pub fn flake_ref_mut(&mut self) -> Option<&mut FlakeRefInput> {
-        self.inner_args_mut().map(|args| &mut args.flake)
-    }
     /// all but list-gens contains `AllArgs`.
     /// If this is already known not to be a ``ListGenerations`` run, you can unwrap this no problem.
     /// ...And that should be a flag to clean up the arg architecture, no?
@@ -291,36 +288,7 @@ impl SubCommand {
             Self::Switch { .. } | Self::Boot { .. } | Self::Test { .. }
         )
     }
-    /// If there's a /etc/nixos/flake.nix (or canonicalised version), sets the flake path if not
-    /// set already, derives a default attribute.
-    pub fn try_init_to_default_flake(&mut self) {
-        // Verify we are happy to flake...
-        let Some(AllArgs {
-            ref mut flake,
-            no_flake: false,
-            ..
-        }) = self.inner_args_mut()
-        else {
-            log::trace!("no-flake set: not attempting to set flake");
-            return;
-        };
-        log::trace!("Happy to flake...");
 
-        // Happy to flake, no flake set: Map in the flake if it exists
-        let Some(path) = flake.canoned_dir() else {
-            return;
-        };
-        log::trace!("Derived flake path: {}", path.display());
-        // We pulled out a default flake, now let's get its attr
-        let attr = Some(crate::flake::FlakeAttr::default());
-        let new_flake = FlakeRefInput {
-            source: Some(path),
-            output_selector: attr,
-        };
-        log::trace!("Setting new flake: {:?}", new_flake);
-
-        *flake = new_flake;
-    }
     fn build_nix(&self) -> bool {
         todo!()
     }
