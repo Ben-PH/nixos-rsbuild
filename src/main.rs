@@ -20,18 +20,20 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     if let Some(gen_meta) = GenerationMeta::dispatch_cmd(&cli) {
         let gens_iter = gen_meta?;
-        println!("{:#?}", gens_iter.collect::<BTreeMap<_,_>>());
-        return Ok(())
+        println!("{:#?}", gens_iter.collect::<BTreeMap<_, _>>());
+        return Ok(());
     }
 
     // Default to using flakes...
-    if let Some(AllArgs { no_flake: false, .. }) = cli.inner_args() {
+    if let Some(AllArgs {
+        no_flake: false, ..
+    }) = cli.inner_args()
+    {
         log::trace!("running flake-build");
         let res = flake::flake_build_config(&cli, &[]);
 
         log::trace!("flake-build-res: {:?}", res);
     }
-
 
     // TODO: wrap and impl drop. The referenced impl does an ssh drop
     let tmpdir = tempfile::TempDir::with_prefix("nixos-rsbuild")?;

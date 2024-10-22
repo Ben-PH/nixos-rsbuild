@@ -150,7 +150,9 @@ impl TryFrom<&Path> for GenerationMeta {
 impl GenerationMeta {
     /// An iterator over (number, generation-meta) pairs. Usually `.collect::<_>()`ed into an
     /// ordered key/value data struct such as a `BTreeMap`.
-    pub fn dispatch_cmd(cmd: &SubCommand) -> Option<io::Result<impl Iterator<Item = (GenNumber, Self)>>> {
+    pub fn dispatch_cmd(
+        cmd: &SubCommand,
+    ) -> Option<io::Result<impl Iterator<Item = (GenNumber, Self)>>> {
         if !matches!(cmd, SubCommand::ListGenerations { .. }) {
             None
         } else {

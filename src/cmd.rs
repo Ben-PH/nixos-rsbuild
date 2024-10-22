@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 use camino::Utf8PathBuf;
 use clap::{Args, Parser, Subcommand};
 
-use crate::flake::FlakeRef;
+use crate::flake::FlakeRefInput;
 
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
@@ -141,7 +141,7 @@ pub struct AllArgs {
     /// that file exists...
     #[clap(long, conflicts_with_all(["file", "attr", "no_flake"]))]
     #[arg(value_parser = flake_parse)]
-    pub flake: Option<FlakeRef>,
+    pub flake: FlakeRefInput,
     #[clap(long)]
     pub no_flake: bool,
 
@@ -172,8 +172,8 @@ pub struct AllArgs {
 
 // TODO: this is needed for bringing in a value parser. if you can access `try_from` directly, do
 // that instead
-fn flake_parse(val: &str) -> Result<FlakeRef, String> {
-    FlakeRef::try_from(val)
+fn flake_parse(val: &str) -> Result<FlakeRefInput, String> {
+    FlakeRefInput::try_from(val)
 }
 
 #[derive(Args, Debug)]
@@ -303,28 +303,22 @@ impl SubCommand {
         };
         log::trace!("Happy to flake...");
 
-        // Verify the flake isn't already set
-        let None = flake else {
-            log::trace!("flake already set: not updating");
-            return;
-        };
-        log::trace!("no flake set: attempting to derive default...");
 
+        
         // Happy to flake, no flake set: Map in the flake if it exists
-        let Some(path) = FlakeRef::canonned_default_dir() else {
-            log::trace!("Could not find a flake: no flake set");
+        let Some(path) = flake.canoned_dir() else {
             return;
         };
         log::trace!("Derived flake path: {}", path.display());
         // We pulled out a default flake, now let's get its attr
         let attr = Some(crate::flake::FlakeAttr::default());
-        let new_flake = FlakeRef {
-            source: path,
+        let new_flake = FlakeRefInput {
+            source: Some(path),
             output_selector: attr,
         };
         log::trace!("Setting new flake: {:?}", new_flake);
 
-        *flake = Some(new_flake);
+        *flake = new_flake;
     }
     fn build_nix(&self) -> bool {
         todo!()
