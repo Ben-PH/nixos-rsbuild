@@ -3,33 +3,35 @@
 #![allow(clippy::module_name_repetitions)]
 use clap::Parser;
 use cmd::{AllArgs, Cli, SubCommand};
+use list_generations::GenerationMeta;
 use std::{
     collections::BTreeMap,
     error::Error,
     io::{self, Write},
-    process::{Command as CliCommand, Output},
+    process::{Command as CliCommand, Output, Stdio},
 };
 mod cmd;
 mod flake;
 mod list_generations;
+pub mod utils;
 
 fn main() -> Result<(), Box<dyn Error>> {
     let cli = initial_init()?;
 
-    // todo: convenience setup to setup the hostname as the default config if using flake.
-    if let Some(AllArgs { flake: Some(_), .. }) = cli.inner_args() {
+    if let Some(gen_meta) = GenerationMeta::dispatch_cmd(&cli) {
+        let gens_iter = gen_meta?;
+        println!("{:#?}", gens_iter.collect::<BTreeMap<_,_>>());
+        return Ok(())
+    }
+
+    // Default to using flakes...
+    if let Some(AllArgs { no_flake: false, .. }) = cli.inner_args() {
         log::trace!("running flake-build");
         let res = flake::flake_build_config(&cli, &[]);
+
         log::trace!("flake-build-res: {:?}", res);
     }
 
-    // Get generation meta-iterator
-    if matches!(cli, SubCommand::ListGenerations { .. }) {
-        let meta =
-            list_generations::GenerationMeta::get_generation_meta()?.collect::<BTreeMap<_, _>>();
-        println!("{:#?}", meta);
-        return Ok(());
-    }
 
     // TODO: wrap and impl drop. The referenced impl does an ssh drop
     let tmpdir = tempfile::TempDir::with_prefix("nixos-rsbuild")?;
@@ -77,7 +79,7 @@ fn initial_init() -> Result<SubCommand, Box<dyn Error>> {
                 rec.args()
             )
         })
-        .filter_level(log::LevelFilter::Debug)
+        .filter_level(log::LevelFilter::Trace)
         .init();
 
     // parse out cli args into a structured encapsulation
@@ -93,7 +95,9 @@ fn initial_init() -> Result<SubCommand, Box<dyn Error>> {
 /// Simple wrapper to trace-log commands that get run, and the renults
 fn run_cmd(cmd: &mut CliCommand) -> io::Result<Output> {
     log::trace!("RUN: {:?}", cmd);
-    let res = cmd.output();
+    let res = cmd.spawn().expect("failed to start").wait_with_output();
+
+    panic!();
     log::trace!("RES: {:?}", res);
     res
 }

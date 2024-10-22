@@ -4,6 +4,8 @@ use serde::{Serialize, Serializer};
 use serde_json::json;
 use std::{collections::BTreeMap, io, path::Path, process::Command};
 
+use crate::cmd::SubCommand;
+
 const GEN_DIR: &str = "/nix/var/nix/profiles";
 
 #[derive(Debug, Serialize, Eq, PartialEq, Copy, Clone)]
@@ -148,7 +150,15 @@ impl TryFrom<&Path> for GenerationMeta {
 impl GenerationMeta {
     /// An iterator over (number, generation-meta) pairs. Usually `.collect::<_>()`ed into an
     /// ordered key/value data struct such as a `BTreeMap`.
-    pub fn get_generation_meta() -> io::Result<impl Iterator<Item = (GenNumber, Self)>> {
+    pub fn dispatch_cmd(cmd: &SubCommand) -> Option<io::Result<impl Iterator<Item = (GenNumber, Self)>>> {
+        if !matches!(cmd, SubCommand::ListGenerations { .. }) {
+            None
+        } else {
+            Some(Self::run_cmd())
+        }
+    }
+
+    fn run_cmd() -> io::Result<impl Iterator<Item = (GenNumber, Self)>> {
         let gen_dir_root = Path::new(GEN_DIR);
 
         // iterate over each entry in the directory...
@@ -165,7 +175,7 @@ impl GenerationMeta {
     fn nixos_version(gen_dir: &Path) -> Result<String, String> {
         let ver_dir = &gen_dir.join("nixos-version");
         log::trace!("ver-dir: {}", ver_dir.display());
-        file_utils::read_fst_line(ver_dir).map_err(|_| "Could not read ver-dir".to_string())
+        crate::utils::read_fst_line(ver_dir).map_err(|_| "Could not read ver-dir".to_string())
     }
 
     fn kernel_version(gen_dir: &Path) -> Result<Version, String> {
@@ -199,8 +209,7 @@ impl GenerationMeta {
 mod file_utils {
     use std::{
         ffi::{OsStr, OsString},
-        fs::File,
-        io::{self, BufRead},
+        io,
         path::{Path, PathBuf},
     };
 
@@ -244,12 +253,15 @@ mod file_utils {
                     ))
             }?;
 
+            // verify the format
             if fname.find('-') != Some(32) {
                 return Err(io::Error::new(
                     io::ErrorKind::Other,
                     "expected <[char; 32]>-<name>. `-` not found at idx 32",
                 ));
             }
+
+            // Now we can destructure the file name into digest, name, and filetype
 
             let entry_type = if cannoned.is_dir() {
                 StoreEntryType::Directory
@@ -275,13 +287,6 @@ mod file_utils {
         fn from(value: &CanonedStorePath) -> Self {
             PathBuf::from(format!("/nix/store/{}-{}", value.digest, value.name))
         }
-    }
-
-    pub(super) fn read_fst_line(file_path: &Path) -> io::Result<String> {
-        let mut reader = io::BufReader::new(File::open(file_path)?);
-        let mut line_buf = String::new();
-        reader.read_line(&mut line_buf)?;
-        Ok(line_buf)
     }
 
     pub(super) fn creation_time(gen_dir: &Path) -> Result<DateTime<Utc>, String> {
