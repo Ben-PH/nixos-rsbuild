@@ -1,6 +1,4 @@
-use std::path::{Path, PathBuf};
-
-use camino::Utf8PathBuf;
+use camino::{Utf8Path, Utf8PathBuf};
 use clap::{Args, Parser, Subcommand};
 
 use crate::flake::{FlakeRef, FlakeRefInput};
@@ -206,15 +204,14 @@ impl AllArgs {
 
 fn profile_name_parse(prof_name: &str) -> Result<Utf8PathBuf, String> {
     let root_str = "/nix/var/nix/profiles";
-    let prof_root = Path::new(root_str);
-    let mut path_buff = PathBuf::from(prof_root);
+    let prof_root = Utf8Path::new(root_str);
+    let mut path_buff = Utf8PathBuf::from(prof_root);
     path_buff.push("system-profiles");
     path_buff.push(prof_name);
-    Utf8PathBuf::from_path_buf(path_buff)
-        .map_err(|_| format!("Cannot construct utf8-path from {}/{}", root_str, prof_name))
+    Ok(path_buff)
 }
 fn file_exists(path: &str) -> Result<Utf8PathBuf, String> {
-    let path = Utf8PathBuf::from_path_buf(PathBuf::from(path)).map_err(|_| path)?;
+    let path = Utf8PathBuf::from(path);
     if !path.exists() {
         return Err(format!("File does not exist: {}", path.as_str()));
     }

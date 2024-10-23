@@ -1,13 +1,7 @@
 use crate::{cmd::SubCommand, run_cmd};
 use camino::Utf8PathBuf;
 use flake_path::FlakeDir;
-use std::{
-    ffi::OsStr,
-    fmt::Display,
-    io,
-    path::{Path, PathBuf},
-    process::Command as CliCommand,
-};
+use std::{ffi::OsStr, fmt::Display, io, path::Path, process::Command as CliCommand};
 
 mod attribute;
 mod flake_path;
@@ -21,7 +15,7 @@ const DEFAULT_FLAKE_NIX: &str = "/etc/nixos/flake.nix";
 pub struct FlakeRefInput {
     /// Pre-`#` component.
     /// Path to the dir where a flake.nix will be searched
-    pub source: PathBuf,
+    pub source: Utf8PathBuf,
     /// Post-`#` component
     pub output_selector: Option<FlakeAttr>,
 }
@@ -33,7 +27,7 @@ impl Display for FlakeRefInput {
             .as_ref()
             .map(|a| format!("#{}", a))
             .unwrap_or_default();
-        write!(f, "{}{}", self.source.display(), attr_path)
+        write!(f, "{}{}", self.source, attr_path)
     }
 }
 
@@ -41,21 +35,21 @@ impl Display for FlakeRefInput {
 pub struct FlakeRef {
     /// Pre-`#` component.
     /// Path to the dir where a flake.nix will be searched
-    pub source: flake_path::FlakeDir<PathBuf>,
+    pub source: flake_path::FlakeDir<Utf8PathBuf>,
     /// Post-`#` component
     pub output_selector: FlakeAttr,
 }
 
 impl Display for FlakeRef {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}#{}", self.source.as_ref().display(), self.output_selector)
+        write!(f, "{}#{}", self.source.as_ref(), self.output_selector)
     }
 }
 
 impl Default for FlakeRefInput {
     fn default() -> Self {
         Self {
-            source: PathBuf::from(DEFAULT_FILE_DIR),
+            source: Utf8PathBuf::from(DEFAULT_FILE_DIR),
             output_selector: Some(FlakeAttr::default()),
         }
     }
@@ -88,23 +82,27 @@ impl FlakeRefInput {
 
     /// where `realpath /etc/nixos/flake.nix` resolves to a `flake.nix` file, provides the path to
     /// the directory
-    pub fn canoned_default_dir() -> Option<PathBuf> {
-        match std::fs::canonicalize(DEFAULT_FLAKE_NIX) {
-            Ok(c) => {
+    pub fn canoned_default_dir() -> Option<Utf8PathBuf> {
+        match std::fs::canonicalize(DEFAULT_FLAKE_NIX).map(Utf8PathBuf::from_path_buf) {
+            Ok(Ok(c)) => {
                 if c.is_dir() {
-                    log::error!("Canonical path from default flake.nix should resolve to a flake.nix. Resolved to: {}", c.display());
+                    log::error!("Canonical path from default flake.nix should resolve to a flake.nix. Resolved to: {}", c);
                     None
                 } else if c
                     .file_name()
                     .expect("somehow symlink of default flake.nix resolved to `..`")
                     != OsStr::new("flake.nix")
                 {
-                    log::error!("Canonical path from default flake.nix resolved to file other than `flake.nix`: {}", c.display());
+                    log::error!("Canonical path from default flake.nix resolved to file other than `flake.nix`: {}", c);
                     None
                 } else {
                     Some(c)
                 }
-            },
+            }
+            Ok(Err(e)) => {
+                log::error!("Canonicalised path {} not valid Utf8", e.display());
+                None
+            }
             Err(e) => {
                 log::error!("Error canonicalising default flake-path: {}", e);
                 None
@@ -121,7 +119,7 @@ impl TryFrom<&str> for FlakeRefInput {
         // no '#'? we just have the source, no selected attr
         let Some(fst_hash) = value.find('#') else {
             return Ok(FlakeRefInput {
-                source: Path::new(value).to_path_buf(),
+                source: Utf8PathBuf::from(value),
                 output_selector: None,
             });
         };
@@ -137,7 +135,7 @@ impl TryFrom<&str> for FlakeRefInput {
 
         // jobs-done!
         Ok(FlakeRefInput {
-            source: PathBuf::from(path),
+            source: Utf8PathBuf::from(path),
             output_selector: Some(attr),
         })
     }
