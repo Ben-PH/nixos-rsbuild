@@ -1,8 +1,10 @@
 #![warn(clippy::pedantic)]
 #![allow(clippy::uninlined_format_args)]
 #![allow(clippy::module_name_repetitions)]
+#![allow(unused)]
 use clap::Parser;
 use cmd::{AllArgs, Cli, SubCommand};
+use list_generations::GenerationMeta;
 use std::{
     collections::BTreeMap,
     error::Error,
@@ -12,22 +14,32 @@ use std::{
 mod cmd;
 mod flake;
 mod list_generations;
+pub mod utils;
 
 fn main() -> Result<(), Box<dyn Error>> {
     let cli = initial_init()?;
 
-    // todo: convenience setup to setup the hostname as the default config if using flake.
-    if let Some(AllArgs { flake: Some(_), .. }) = cli.inner_args() {
-        log::trace!("running flake-build");
-        let res = flake::flake_build_config(&cli, &[]);
-        log::trace!("flake-build-res: {:?}", res);
+    // list generations
+    if let Some(gen_meta) = GenerationMeta::dispatch_cmd(&cli) {
+        let gens_iter = gen_meta?;
+        println!("{:#?}", gens_iter.collect::<BTreeMap<_, _>>());
+        return Ok(());
     }
 
-    // Get generation meta-iterator
-    if matches!(cli, SubCommand::ListGenerations { .. }) {
-        let meta =
-            list_generations::GenerationMeta::get_generation_meta()?.collect::<BTreeMap<_, _>>();
-        println!("{:#?}", meta);
+    // plain flake build
+    if let SubCommand::Build {
+        all: AllArgs {
+            flake,
+            no_flake: false,
+            ..
+        },
+        ..
+    } = cli
+    {
+        log::trace!("getting full flake");
+        let full_flake = flake.init_flake_ref()?;
+        let out_link = full_flake.build(None)?;
+        log::trace!("outlink: {}", out_link);
         return Ok(());
     }
 
@@ -77,15 +89,15 @@ fn initial_init() -> Result<SubCommand, Box<dyn Error>> {
                 rec.args()
             )
         })
-        .filter_level(log::LevelFilter::Debug)
+        .filter_level(log::LevelFilter::Error)
         .init();
 
     // parse out cli args into a structured encapsulation
     let cli = {
-        let mut mut_cli = Cli::parse_from(args);
-        log::trace!("parsed cli: {:?}", mut_cli);
-        mut_cli.command.try_init_to_default_flake();
-        mut_cli
+        let cli = Cli::parse_from(args);
+        log::trace!("parsed cli: {:?}", cli);
+        // mut_cli.command.try_init_to_default_flake();
+        cli
     };
     Ok(cli.command)
 }
@@ -93,7 +105,7 @@ fn initial_init() -> Result<SubCommand, Box<dyn Error>> {
 /// Simple wrapper to trace-log commands that get run, and the renults
 fn run_cmd(cmd: &mut CliCommand) -> io::Result<Output> {
     log::trace!("RUN: {:?}", cmd);
-    let res = cmd.output();
+    let res = cmd.spawn().expect("failed to start").wait_with_output();
     log::trace!("RES: {:?}", res);
     res
 }

@@ -1,9 +1,9 @@
-use std::path::{Path, PathBuf};
+use std::io::{self, ErrorKind};
 
-use camino::Utf8PathBuf;
+use camino::{Utf8Path, Utf8PathBuf};
 use clap::{Args, Parser, Subcommand};
 
-use crate::flake::FlakeRef;
+use crate::flake::{FlakeRef, FlakeRefInput};
 
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
@@ -140,8 +140,8 @@ pub struct AllArgs {
     /// TODO: if both flake and no-flake are unset, set flake to /etc/nixos/flake.nix, but only if
     /// that file exists...
     #[clap(long, conflicts_with_all(["file", "attr", "no_flake"]))]
-    #[arg(value_parser = flake_parse)]
-    pub flake: Option<FlakeRef>,
+    #[arg(value_parser = flake_parse, default_value_t = FlakeRefInput::default())]
+    pub flake: FlakeRefInput,
     #[clap(long)]
     pub no_flake: bool,
 
@@ -172,8 +172,8 @@ pub struct AllArgs {
 
 // TODO: this is needed for bringing in a value parser. if you can access `try_from` directly, do
 // that instead
-fn flake_parse(val: &str) -> Result<FlakeRef, String> {
-    FlakeRef::try_from(val)
+fn flake_parse(val: &str) -> Result<FlakeRefInput, String> {
+    FlakeRefInput::try_from(val)
 }
 
 #[derive(Args, Debug)]
@@ -204,25 +204,30 @@ impl AllArgs {
     }
 }
 
+#[allow(clippy::unnecessary_wraps, reason = "result needed for parser")]
 fn profile_name_parse(prof_name: &str) -> Result<Utf8PathBuf, String> {
-    let root_str = "/nix/var/nix/profiles";
-    let prof_root = Path::new(root_str);
-    let mut path_buff = PathBuf::from(prof_root);
-    path_buff.push("system-profiles");
-    path_buff.push(prof_name);
-    Utf8PathBuf::from_path_buf(path_buff)
-        .map_err(|_| format!("Cannot construct utf8-path from {}/{}", root_str, prof_name))
+    Ok(Utf8Path::new("/nix/var/nix/profiles/system-profiles").join(prof_name))
 }
-fn file_exists(path: &str) -> Result<Utf8PathBuf, String> {
-    let path = Utf8PathBuf::from_path_buf(PathBuf::from(path)).map_err(|_| path)?;
+
+fn file_exists(path: &str) -> io::Result<Utf8PathBuf> {
+    let path = Utf8PathBuf::from(path);
     if !path.exists() {
-        return Err(format!("File does not exist: {}", path.as_str()));
+        return Err(io::Error::new(
+            ErrorKind::NotFound,
+            format!("File does not exist: {}", path.as_str()),
+        ));
     }
     if !path.is_file() {
-        return Err(format!("Not a file: {}", path.as_str()));
+        return Err(io::Error::new(
+            ErrorKind::Other,
+            format!("Not a file: {}", path.as_str()),
+        ));
     }
     if !matches!(path.extension(), Some("nix")) {
-        return Err("Requires '.nix' extension".to_string());
+        return Err(io::Error::new(
+            ErrorKind::Other,
+            "Requires '.nix' extension".to_string(),
+        ));
     }
     Ok(path)
 }
@@ -288,44 +293,7 @@ impl SubCommand {
             Self::Switch { .. } | Self::Boot { .. } | Self::Test { .. }
         )
     }
-    /// If there's a /etc/nixos/flake.nix (or canonicalised version), sets the flake path if not
-    /// set already, derives a default attribute.
-    pub fn try_init_to_default_flake(&mut self) {
-        // Verify we are happy to flake...
-        let Some(AllArgs {
-            ref mut flake,
-            no_flake: false,
-            ..
-        }) = self.inner_args_mut()
-        else {
-            log::trace!("no-flake set: not attempting to set flake");
-            return;
-        };
-        log::trace!("Happy to flake...");
 
-        // Verify the flake isn't already set
-        let None = flake else {
-            log::trace!("flake already set: not updating");
-            return;
-        };
-        log::trace!("no flake set: attempting to derive default...");
-
-        // Happy to flake, no flake set: Map in the flake if it exists
-        let Some(path) = FlakeRef::canonned_default_dir() else {
-            log::trace!("Could not find a flake: no flake set");
-            return;
-        };
-        log::trace!("Derived flake path: {}", path.display());
-        // We pulled out a default flake, now let's get its attr
-        let attr = Some(crate::flake::FlakeAttr::default());
-        let new_flake = FlakeRef {
-            source: path,
-            output_selector: attr,
-        };
-        log::trace!("Setting new flake: {:?}", new_flake);
-
-        *flake = Some(new_flake);
-    }
     fn build_nix(&self) -> bool {
         todo!()
     }

@@ -1,64 +1,167 @@
 use crate::{cmd::SubCommand, run_cmd};
-use camino::Utf8PathBuf;
+use camino::{Utf8Path, Utf8PathBuf};
+use flake_path::FlakeDir;
 use std::{
-    ffi::OsString,
-    io,
-    path::{Path, PathBuf},
+    ffi::OsStr,
+    fmt::Display,
+    io::{self, ErrorKind},
+    path::Path,
     process::Command as CliCommand,
 };
-const NIX_ARGS: [&str; 2] = ["--extra-experimental-features", "'nix-command flakes'"];
-const DEFAULT_FLAKE_NIX: &str = "/etc/nixos/flake.nix";
+
+mod attribute;
+mod flake_path;
+pub use attribute::FlakeAttr;
+
 /// Destructured `<flake_dir>[#attribute]`
 #[derive(Debug, Clone)]
-pub struct FlakeRef {
+pub struct FlakeRefInput {
     /// Pre-`#` component.
     /// Path to the dir where a flake.nix will be searched
-    pub source: PathBuf,
+    pub source: Utf8PathBuf,
     /// Post-`#` component
     pub output_selector: Option<FlakeAttr>,
 }
 
-impl FlakeRef {
-    /// Checks if /etc/nixos has a flake.nix, or the canonicalised if need be
-    pub fn canonned_default_dir() -> Option<PathBuf> {
-        // Default path
-
-        // Resolve sym-links
-        let can_path = std::fs::canonicalize(DEFAULT_FLAKE_NIX).ok()?;
-
-        // ...and pull out the directory
-        if can_path.is_file() {
-            return can_path.parent().map(Path::to_path_buf);
+impl Display for FlakeRefInput {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.source)?;
+        if let Some(attr_path) = &self.output_selector {
+            if attr_path.len() > 0 {
+                write!(f, "#{}", attr_path)?;
+            }
         }
-        Some(can_path)
+        Ok(())
     }
-    pub fn _canonicalise_path(&mut self) {
-        log::trace!("cononicalising path: {}", self.source.display());
-        log::warn!(
-            "Attempting to canonicalise {}: this is untested",
-            self.source.display()
-        );
-        if let Ok(path) = std::fs::canonicalize(&self.source) {
-            if path.is_file() {
-                log::error!("Internal error: canonicalised a source to a file");
+}
+
+#[derive(Debug, Clone)]
+pub struct FlakeRef {
+    /// Pre-`#` component.
+    /// Path to the dir where a flake.nix will be searched
+    pub source: flake_path::FlakeDir<Utf8PathBuf>,
+    /// Post-`#` component
+    pub output_selector: Option<FlakeAttr>,
+}
+
+impl Display for FlakeRef {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.source)?;
+        if let Some(output) = &self.output_selector {
+            if output.len() > 0 {
+                write!(f, "#{}", output)?;
             }
-            if path.is_dir() && !path.eq(&self.source) {
-                log::trace!("Updateing flake source: {}", path.display());
-                self.source = path;
+        }
+        Ok(())
+    }
+}
+
+impl FlakeRef {
+    pub fn build(&self, out_dir: Option<&Utf8Path>) -> io::Result<Utf8PathBuf> {
+        log::info!("Building in flake mode.");
+
+        if let Some(out_dir) = out_dir {
+            if !out_dir.is_dir() {
+                return Err(io::Error::new(
+                    io::ErrorKind::Other,
+                    format!("requested out dir not a directory: {}", out_dir),
+                ));
             }
+        }
+
+        let out_dir = out_dir.unwrap_or(Utf8Path::new(".")).join("result");
+        let mut cmd = CliCommand::new("nom");
+        cmd.args([
+            "build",
+            self.to_string().as_str(),
+            "--out-link",
+            out_dir.as_str(),
+        ]);
+        run_cmd(&mut cmd);
+        let path = std::fs::canonicalize(out_dir)?;
+        Utf8PathBuf::from_path_buf(path).map_err(|e| {
+            io::Error::new(
+                io::ErrorKind::Other,
+                format!("invalud utf in canonicalised path {}", e.display()),
+            )
+        })
+    }
+}
+
+// impl Display for FlakeRef {
+//     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+//         write!(f, "{}#{}", self.source.as_ref(), self.output_selector)
+//     }
+// }
+
+impl Default for FlakeRefInput {
+    fn default() -> Self {
+        Self {
+            source: Utf8PathBuf::from(crate::utils::DEFAULT_FILE_DIR),
+            output_selector: Some(FlakeAttr::default()),
         }
     }
 }
 
-/// Takes a string and maps it to a flake url
-impl TryFrom<&str> for FlakeRef {
-    type Error = String;
+impl FlakeRefInput {
+    /// nixos-rsbuild will flakebuild, unless explicitly stated with the --no-flake flag
+    ///
+    /// # No path stated in flake-ref
+    /// - sets `dirname (realpath /etc/nixos/flake.nix)` for path (i.e. the dir containing the sym-link
+    /// # No Attribute stated in the flake-ref
+    /// - sets attr to `nixosConfigurations.<hostname>.config.system.build.toplevel`
+    /// - Attempts to derive `<hostname>` from content of `/proc/sys/kernel/hostname`
+    /// - Falls back to `default` for the `<hostname>`
+    ///
+    /// # Error
+    /// - No `/etc/nixos/flake.nix` present
+    ///
+    /// TODO: Error-out if derived hostname is not present in `nixosConfigurations`
+    pub fn init_flake_ref(&self) -> io::Result<FlakeRef> {
+        let path = FlakeDir::try_from_path(&self.source)?;
+        let mut attr = self.output_selector.clone().unwrap_or_default();
+        attr.route_to_toplevel();
 
-    fn try_from(value: &str) -> Result<Self, Self::Error> {
+        Ok(FlakeRef {
+            source: path,
+            output_selector: Some(attr),
+        })
+    }
+
+    /// where `realpath /etc/nixos/flake.nix` resolves to a `flake.nix` file, provides the path to
+    /// the directory
+    pub fn canoned_default_dir() -> io::Result<Utf8PathBuf> {
+        let dir =
+            Utf8PathBuf::from_path_buf(std::fs::canonicalize(crate::utils::DEFAULT_FLAKE_NIX)?)
+                .map_err(|e| {
+                    io::Error::new(
+                        io::ErrorKind::Other,
+                        format!("Canonicalised path {} not valid Utf8", e.display()),
+                    )
+                })?;
+        if dir.is_dir() {
+            Err(io::Error::new(ErrorKind::Other, format!("Canonical path from default flake.nix should resolve to a flake.nix. Resolved to: {}", dir)))
+        } else if dir
+            .file_name()
+            .expect("somehow symlink of default flake.nix resolved to `..`")
+            != OsStr::new("flake.nix")
+        {
+            Err(io::Error::new(ErrorKind::Other, format!("Canonical path from default flake.nix resolved to file other than `flake.nix`: {}", dir)))
+        } else {
+            Ok(dir)
+        }
+    }
+}
+
+/// Takes a string and maps it to a flake-ref
+impl<'a> TryFrom<&'a str> for FlakeRefInput {
+    type Error = &'a str;
+
+    fn try_from(value: &'a str) -> Result<Self, Self::Error> {
         // no '#'? we just have the source, no selected attr
         let Some(fst_hash) = value.find('#') else {
-            return Ok(FlakeRef {
-                source: Path::new(value).to_path_buf(),
+            return Ok(FlakeRefInput {
+                source: Utf8PathBuf::from(value),
                 output_selector: None,
             });
         };
@@ -68,103 +171,12 @@ impl TryFrom<&str> for FlakeRef {
         let stripped_attr = &hsh_attr[1..];
 
         // parse "bar" into `FlakeAttr(["path","to", "bar"])`
-        let Ok(attr) = FlakeAttr::try_from(stripped_attr.to_string()) else {
-            return Err(value.to_string());
-        };
+        let attr = FlakeAttr::try_from(stripped_attr.to_string()).map_err(|e| value)?;
 
         // jobs-done!
-        Ok(FlakeRef {
-            source: PathBuf::from(path),
+        Ok(FlakeRefInput {
+            source: Utf8PathBuf::from(path),
             output_selector: Some(attr),
         })
     }
-}
-
-/// Contains ordered collection of an attribute path.
-///
-/// e.g. when using `--flake /path/to/dir#fizz.buzz`, this will be [fizz, buzz] internally
-#[derive(Debug, Clone)]
-pub struct FlakeAttr {
-    attr_path: Vec<String>,
-}
-
-/// "" -> Error
-/// "contains"double.quote" -> Error
-/// "contains#hash" -> Error
-/// "foo" -> [foo]
-/// "foo.bar" -> [foo, bar]
-impl TryFrom<String> for FlakeAttr {
-    type Error = String;
-
-    fn try_from(value: String) -> Result<Self, Self::Error> {
-        if value.contains('#') || value.contains('"') || value.is_empty() {
-            log::trace!("malformed attr: {}", value);
-            return Err(value);
-        }
-        Ok(FlakeAttr {
-            attr_path: value.split('.').map(ToString::to_string).collect(),
-        })
-    }
-}
-
-/// `["flake", "attribute", "path"]` -> "flake.attribute.path"
-impl std::fmt::Display for FlakeAttr {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.attr_path.join("."))
-    }
-}
-
-impl Default for FlakeAttr {
-    fn default() -> Self {
-        let Ok(attr) = hostname::get()
-            .unwrap_or(OsString::from("default"))
-            .into_string()
-        else {
-            eprintln!("Hostname fetch returned invalid unicode");
-            std::process::exit(1);
-        };
-        Self {
-            attr_path: vec!["nixosConfigurations".to_string(), attr],
-        }
-    }
-}
-
-pub fn flake_build_config(sub_cmd: &SubCommand, args: &[&str]) -> io::Result<Utf8PathBuf> {
-    println!("Building in flake mode.");
-    if !sub_cmd.building_attr()
-        && !matches!(
-            sub_cmd,
-            SubCommand::Switch { .. }
-                | SubCommand::Boot { .. }
-                | SubCommand::Test { .. }
-                | SubCommand::DryActivate { .. }
-        )
-    {
-        log::trace!("Not building attre: just run nix build {}", args.join(" "));
-        // nix flake build, e.g. nixos-rebuild build --flake .#username
-        let mut cmd = CliCommand::new("nix");
-        cmd.args(["--extra-experimental-features", "'nix-command flakes'"])
-            .arg("build")
-            .args(args);
-        let _ = run_cmd(&mut cmd);
-        // let _sym_link_to_result = std::fs::canonicalize(todo!("tmpDir joined with /result"))?;
-    } else if !sub_cmd.inner_args().is_some_and(|a| a.build_host) {
-        let mut cmd = CliCommand::new("nix");
-        cmd.args(NIX_ARGS).arg("build").args(args).arg("--out-link");
-        // .arg(todo!("tmpDir joined with /result"))
-        let _ = run_cmd(&mut cmd);
-        // let _sym_link_to_result = std::fs::canonicalize(todo!("tmpDir joined with /result"))?;
-    } else {
-        let (attr, _args) = (args[0], &args[1..]);
-        // TODO: bring in FlakeArgs pass-through
-        let mut cmd = CliCommand::new("nix");
-        cmd.args(NIX_ARGS)
-            .args(["eval", "--raw", &format!("{}.drv", attr)]);
-        let drv = run_cmd(&mut cmd)?.stdout;
-        if !String::from_utf8(drv).is_ok_and(|s| Path::new(&s).exists()) {
-            eprintln!("nix eval failed");
-            std::process::exit(1);
-        }
-    }
-    todo!()
 }
