@@ -154,10 +154,10 @@ impl FlakeRefInput {
 }
 
 /// Takes a string and maps it to a flake-ref
-impl<'a> TryFrom<&'a str> for FlakeRefInput {
-    type Error = &'a str;
+impl TryFrom<&str> for FlakeRefInput {
+    type Error = String;
 
-    fn try_from(value: &'a str) -> Result<Self, Self::Error> {
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
         // no '#'? we just have the source, no selected attr
         let Some(fst_hash) = value.find('#') else {
             return Ok(FlakeRefInput {
@@ -171,7 +171,7 @@ impl<'a> TryFrom<&'a str> for FlakeRefInput {
         let stripped_attr = &hsh_attr[1..];
 
         // parse "bar" into `FlakeAttr(["path","to", "bar"])`
-        let attr = FlakeAttr::try_from(stripped_attr.to_string()).map_err(|e| value)?;
+        let attr = FlakeAttr::try_from(stripped_attr.to_string()).map_err(|e| value.to_string())?;
 
         // jobs-done!
         Ok(FlakeRefInput {

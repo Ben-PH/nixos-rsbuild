@@ -37,10 +37,10 @@ impl FlakeAttr {
 /// "contains#hash" -> Error
 /// "foo" -> [foo]
 /// "foo.bar" -> [foo, bar]
-impl<'a> TryFrom<&'a str> for FlakeAttr {
-    type Error = &'a str;
+impl TryFrom<String> for FlakeAttr {
+    type Error = String;
 
-    fn try_from(value: &'a str) -> Result<Self, Self::Error> {
+    fn try_from(value: String) -> Result<Self, Self::Error> {
         if value.contains('#') || value.contains('"') || value.is_empty() {
             log::trace!("malformed attr: {}", value);
             return Err(value);
