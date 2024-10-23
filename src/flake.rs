@@ -1,7 +1,8 @@
 use crate::{cmd::SubCommand, run_cmd};
 use camino::Utf8PathBuf;
+use flake_path::FlakeDir;
 use std::{
-    ffi::{OsStr, OsString},
+    ffi::OsStr,
     fmt::Display,
     io,
     path::{Path, PathBuf},
@@ -9,9 +10,12 @@ use std::{
 };
 
 mod attribute;
+mod flake_path;
 pub use attribute::FlakeAttr;
 
+const DEFAULT_FILE_DIR: &str = "/etc/nixos";
 const DEFAULT_FLAKE_NIX: &str = "/etc/nixos/flake.nix";
+
 /// Destructured `<flake_dir>[#attribute]`
 #[derive(Debug, Clone)]
 pub struct FlakeRefInput {
@@ -21,6 +25,7 @@ pub struct FlakeRefInput {
     /// Post-`#` component
     pub output_selector: Option<FlakeAttr>,
 }
+
 impl Display for FlakeRefInput {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let attr_path = self
@@ -31,24 +36,26 @@ impl Display for FlakeRefInput {
         write!(f, "{}{}", self.source.display(), attr_path)
     }
 }
+
 #[derive(Debug, Clone)]
 pub struct FlakeRef {
     /// Pre-`#` component.
     /// Path to the dir where a flake.nix will be searched
-    pub source: PathBuf,
+    pub source: flake_path::FlakeDir<PathBuf>,
     /// Post-`#` component
     pub output_selector: FlakeAttr,
 }
+
 impl Display for FlakeRef {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}#{}", self.source.display(), self.output_selector)
+        write!(f, "{}#{}", self.source.as_ref().display(), self.output_selector)
     }
 }
 
 impl Default for FlakeRefInput {
     fn default() -> Self {
         Self {
-            source: PathBuf::from("/etc/nixos/"),
+            source: PathBuf::from(DEFAULT_FILE_DIR),
             output_selector: Some(FlakeAttr::default()),
         }
     }
@@ -68,15 +75,12 @@ impl FlakeRefInput {
     /// - No `/etc/nixos/flake.nix` present
     ///
     /// TODO: Error-out if derived hostname is not present in `nixosConfigurations`
-    pub fn init_flake_ref(&self) -> Option<FlakeRef> {
-        let Some(path) = self.canoned_dir() else {
-            log::error!("failed in finding path");
-            return None;
-        };
+    pub fn init_flake_ref(&self) -> io::Result<FlakeRef> {
+        let path = FlakeDir::try_from_path(&self.source)?;
         let mut attr = self.output_selector.clone().unwrap_or_default();
         attr.route_to_toplevel();
 
-        Some(FlakeRef {
+        Ok(FlakeRef {
             source: path,
             output_selector: attr,
         })
@@ -85,90 +89,27 @@ impl FlakeRefInput {
     /// where `realpath /etc/nixos/flake.nix` resolves to a `flake.nix` file, provides the path to
     /// the directory
     pub fn canoned_default_dir() -> Option<PathBuf> {
-        match std::fs::canonicalize("/etc/nixos/flake.nix") {
+        match std::fs::canonicalize(DEFAULT_FLAKE_NIX) {
             Ok(c) => {
                 if c.is_dir() {
                     log::error!("Canonical path from default flake.nix should resolve to a flake.nix. Resolved to: {}", c.display());
-                    return None;
+                    None
                 } else if c
                     .file_name()
                     .expect("somehow symlink of default flake.nix resolved to `..`")
                     != OsStr::new("flake.nix")
                 {
                     log::error!("Canonical path from default flake.nix resolved to file other than `flake.nix`: {}", c.display());
-                    return None;
+                    None
+                } else {
+                    Some(c)
                 }
-                return Some(c);
-            }
+            },
             Err(e) => {
                 log::error!("Error canonicalising default flake-path: {}", e);
-                return None;
+                None
             }
         }
-    }
-    /// Resolves symbolic links in flakeref path:
-    /// path is not a dir: None
-    /// path does not contain flake.nix: None
-    /// contained flake.nix is a regular file: returned path matches current
-    /// cantained flake.nix sym-links to anything other than regular file named `flake.nix`: None
-    /// contained flake.nix links to regular file named `flake.nix`: said files parent directory
-    pub fn canoned_dir(&self) -> Option<PathBuf> {
-        if !self.source.is_dir() {
-            log::error!("Expected directory, got file: {}", self.source.display());
-            return None;
-        }
-
-        let flake_loc = self.source.join("flake.nix");
-        let flake_exists = match std::fs::exists(&flake_loc) {
-            Ok(exists) => exists,
-            Err(e) => {
-                log::error!(
-                    "Error when checking for existence of flake at {}: {}",
-                    flake_loc.display(),
-                    e
-                );
-                return None;
-            }
-        };
-
-        if !flake_exists {
-            log::error!("flake-path must be a directory containing `flake.nix`.");
-            return None;
-        }
-
-        let canoned_path = match std::fs::canonicalize(&flake_loc) {
-            Ok(path) => path,
-            Err(e) => {
-                log::error!("Could not canonicalise path {}: {}", flake_loc.display(), e);
-                return None;
-            }
-        };
-        if canoned_path.is_dir() {
-            log::error!(
-                "Sym-link from {} must resolve to `flake.nix`. Resolved to a directory: {}",
-                flake_loc.display(),
-                canoned_path.display()
-            );
-            return None;
-        }
-        if canoned_path.file_name() != Some(OsStr::new("flake.nix")) {
-            log::error!(
-                "Sym-link from {} must resolve to a `flake.nix`. Resolved to: {}",
-                flake_loc.display(),
-                canoned_path.display()
-            );
-            return None;
-        }
-
-        let res = canoned_path.parent().map(Path::to_path_buf);
-        if res.is_none() {
-            log::error!(
-                "Could not resolve directory from {}",
-                canoned_path.display()
-            )
-        }
-
-        res
     }
 }
 

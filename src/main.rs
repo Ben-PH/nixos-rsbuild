@@ -1,6 +1,7 @@
 #![warn(clippy::pedantic)]
 #![allow(clippy::uninlined_format_args)]
 #![allow(clippy::module_name_repetitions)]
+#![allow(unused)]
 use clap::Parser;
 use cmd::{AllArgs, Cli, SubCommand};
 use list_generations::GenerationMeta;
@@ -8,7 +9,7 @@ use std::{
     collections::BTreeMap,
     error::Error,
     io::{self, Write},
-    process::{Command as CliCommand, Output, Stdio},
+    process::{Command as CliCommand, Output},
 };
 mod cmd;
 mod flake;
@@ -96,10 +97,10 @@ fn initial_init() -> Result<SubCommand, Box<dyn Error>> {
 
     // parse out cli args into a structured encapsulation
     let cli = {
-        let mut mut_cli = Cli::parse_from(args);
-        log::trace!("parsed cli: {:?}", mut_cli);
+        let cli = Cli::parse_from(args);
+        log::trace!("parsed cli: {:?}", cli);
         // mut_cli.command.try_init_to_default_flake();
-        mut_cli
+        cli
     };
     Ok(cli.command)
 }
