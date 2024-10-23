@@ -1,5 +1,5 @@
 use crate::{cmd::SubCommand, run_cmd};
-use camino::Utf8PathBuf;
+use camino::{Utf8Path, Utf8PathBuf};
 use flake_path::FlakeDir;
 use std::{ffi::OsStr, fmt::Display, io, path::Path, process::Command as CliCommand};
 
@@ -37,14 +37,61 @@ pub struct FlakeRef {
     /// Path to the dir where a flake.nix will be searched
     pub source: flake_path::FlakeDir<Utf8PathBuf>,
     /// Post-`#` component
-    pub output_selector: FlakeAttr,
+    pub output_selector: Option<FlakeAttr>,
 }
-
-impl Display for FlakeRef {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}#{}", self.source.as_ref(), self.output_selector)
+impl ToString for FlakeRef {
+    fn to_string(&self) -> String {
+        let attr_path: String = self
+            .output_selector
+            .as_ref()
+            .map(|a| format!("#{}", a))
+            .unwrap_or_default();
+        format!("{}{}", self.source, attr_path)
     }
 }
+
+impl FlakeRef {
+    pub fn build(&self, out_dir: Option<&Utf8Path>) -> io::Result<Utf8PathBuf> {
+        log::info!("Building in flake mode.");
+
+        if let Some(out_dir) = out_dir {
+            if !out_dir.is_dir() {
+                return Err(io::Error::new(
+                    io::ErrorKind::Other,
+                    format!("requested out dir not a directory: {}", out_dir),
+                ));
+            }
+        }
+
+        let mut out_dir = out_dir.unwrap_or(Utf8Path::new(".")).join("result");
+        let mut i = 0;
+        while std::fs::exists(&out_dir)? {
+            i += 1;
+            out_dir.set_file_name(format!("result-{}", i));
+        }
+        let mut cmd = CliCommand::new("nom");
+        cmd.args([
+            "build",
+            self.to_string().as_str(),
+            "--out-link",
+            out_dir.as_str(),
+        ]);
+        run_cmd(&mut cmd);
+        let path = std::fs::canonicalize(out_dir)?;
+        Utf8PathBuf::from_path_buf(path).map_err(|e| {
+            io::Error::new(
+                io::ErrorKind::Other,
+                format!("invalud utf in canonicalised path {}", e.display()),
+            )
+        })
+    }
+}
+
+// impl Display for FlakeRef {
+//     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+//         write!(f, "{}#{}", self.source.as_ref(), self.output_selector)
+//     }
+// }
 
 impl Default for FlakeRefInput {
     fn default() -> Self {
@@ -76,7 +123,7 @@ impl FlakeRefInput {
 
         Ok(FlakeRef {
             source: path,
-            output_selector: attr,
+            output_selector: Some(attr),
         })
     }
 
@@ -139,42 +186,4 @@ impl TryFrom<&str> for FlakeRefInput {
             output_selector: Some(attr),
         })
     }
-}
-
-pub fn flake_build_config(sub_cmd: &SubCommand, args: &[&str]) -> io::Result<Utf8PathBuf> {
-    log::info!("Building in flake mode.");
-    if !sub_cmd.building_attr()
-        && !matches!(
-            sub_cmd,
-            SubCommand::Switch { .. }
-                | SubCommand::Boot { .. }
-                | SubCommand::Test { .. }
-                | SubCommand::DryActivate { .. }
-        )
-    {
-        log::trace!("Not building attre: just run nix build {}", args.join(" "));
-        // nix flake build, e.g. nixos-rebuild build --flake .#username
-        log::trace!("flake args: {:?}", sub_cmd.inner_args().unwrap().flake);
-        let mut cmd = CliCommand::new("nom");
-        cmd.arg("build").args(args);
-        let _ = run_cmd(&mut cmd);
-        // let _sym_link_to_result = std::fs::canonicalize(todo!("tmpDir joined with /result"))?;
-    } else if !sub_cmd.inner_args().is_some_and(|a| a.build_host) {
-        let mut cmd = CliCommand::new("nom");
-        cmd.arg("build").args(args).arg("--out-link");
-        // .arg(todo!("tmpDir joined with /result"))
-        let _ = run_cmd(&mut cmd);
-        // let _sym_link_to_result = std::fs::canonicalize(todo!("tmpDir joined with /result"))?;
-    } else {
-        let (attr, _args) = (args[0], &args[1..]);
-        // TODO: bring in FlakeArgs pass-through
-        let mut cmd = CliCommand::new("nom");
-        cmd.args(["eval", "--raw", &format!("{}.drv", attr)]);
-        let drv = run_cmd(&mut cmd)?.stdout;
-        if !String::from_utf8(drv).is_ok_and(|s| Path::new(&s).exists()) {
-            eprintln!("nix eval failed");
-            std::process::exit(1);
-        }
-    }
-    todo!()
 }

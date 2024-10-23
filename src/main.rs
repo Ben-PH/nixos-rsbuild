@@ -37,12 +37,8 @@ fn main() -> Result<(), Box<dyn Error>> {
     } = cli
     {
         log::trace!("getting full flake");
-        let full_flake = flake.init_flake_ref();
-        let _ = run_cmd(
-            CliCommand::new("nom")
-                .arg("build")
-                .arg(format!("{}", full_flake.unwrap())),
-        );
+        let full_flake = flake.init_flake_ref()?;
+        full_flake.build(None);
         return Ok(());
     }
 
