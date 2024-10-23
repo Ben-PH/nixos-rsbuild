@@ -153,10 +153,10 @@ impl GenerationMeta {
     pub fn dispatch_cmd(
         cmd: &SubCommand,
     ) -> Option<io::Result<impl Iterator<Item = (GenNumber, Self)>>> {
-        if !matches!(cmd, SubCommand::ListGenerations { .. }) {
-            None
-        } else {
+        if matches!(cmd, SubCommand::ListGenerations { .. }) {
             Some(Self::run_cmd())
+        } else {
+            None
         }
     }
 

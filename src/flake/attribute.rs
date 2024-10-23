@@ -1,4 +1,4 @@
-use std::{ffi::OsString, path::Path};
+use std::{ffi::OsString, io, path::Path};
 
 /// Contains ordered collection of an attribute path.
 ///
@@ -9,6 +9,8 @@ pub struct FlakeAttr {
 }
 
 impl FlakeAttr {
+    /// Prepends `nixosConfigurations` if not already. sets hostname to a `hostname` read, falling
+    /// back to default.
     fn set_config(&mut self) {
         if self.attr_path.first().map(String::as_str) != Some("nixosConfigurations") {
             self.attr_path.insert(0, "nixosConfigurations".to_string());
@@ -23,12 +25,25 @@ impl FlakeAttr {
         log::trace!("Flake attr: {}", self);
     }
 
+    /// appends the attribute path `.config.system.build.toplivel`, i.e. the path used when running
+    /// the standard build: `nixosConfigurations.<hostname>.config....`
     pub fn route_to_toplevel(&mut self) {
         self.attr_path
             .extend_from_slice(&["config", "system", "build", "toplevel"].map(String::from));
     }
     pub fn len(&self) -> usize {
         self.attr_path.len()
+    }
+    pub fn try_default() -> io::Result<Self> {
+        let attr = hostname::get()?.into_string().map_err(|_| {
+            io::Error::new(
+                io::ErrorKind::Other,
+                "hostname read gave non-utf8 result".to_string(),
+            )
+        })?;
+        Ok(Self {
+            attr_path: vec!["nixosConfigurations".to_string(), attr],
+        })
     }
 }
 
@@ -55,20 +70,5 @@ impl TryFrom<String> for FlakeAttr {
 impl std::fmt::Display for FlakeAttr {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.attr_path.join("."))
-    }
-}
-
-impl Default for FlakeAttr {
-    fn default() -> Self {
-        let Ok(attr) = hostname::get()
-            .unwrap_or(OsString::from("default"))
-            .into_string()
-        else {
-            eprintln!("Hostname fetch returned invalid unicode");
-            std::process::exit(1);
-        };
-        Self {
-            attr_path: vec!["nixosConfigurations".to_string(), attr],
-        }
     }
 }

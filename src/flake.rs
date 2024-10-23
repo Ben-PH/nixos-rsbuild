@@ -94,15 +94,6 @@ impl FlakeRef {
 //     }
 // }
 
-impl Default for FlakeRefInput {
-    fn default() -> Self {
-        Self {
-            source: Utf8PathBuf::from(crate::utils::DEFAULT_FILE_DIR),
-            output_selector: Some(FlakeAttr::default()),
-        }
-    }
-}
-
 impl FlakeRefInput {
     /// nixos-rsbuild will flakebuild, unless explicitly stated with the --no-flake flag
     ///
@@ -119,7 +110,10 @@ impl FlakeRefInput {
     /// TODO: Error-out if derived hostname is not present in `nixosConfigurations`
     pub fn init_flake_ref(&self) -> io::Result<FlakeRef> {
         let path = FlakeDir::try_from_path(&self.source)?;
-        let mut attr = self.output_selector.clone().unwrap_or_default();
+        let mut attr = self
+            .output_selector
+            .clone()
+            .unwrap_or(FlakeAttr::try_default()?);
         attr.route_to_toplevel();
 
         Ok(FlakeRef {
@@ -150,6 +144,12 @@ impl FlakeRefInput {
         } else {
             Ok(dir)
         }
+    }
+    pub fn try_default() -> io::Result<Self> {
+        Ok(Self {
+            source: Utf8PathBuf::from(crate::utils::DEFAULT_FILE_DIR),
+            output_selector: Some(FlakeAttr::try_default()?),
+        })
     }
 }
 

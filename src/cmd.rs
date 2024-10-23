@@ -140,7 +140,7 @@ pub struct AllArgs {
     /// TODO: if both flake and no-flake are unset, set flake to /etc/nixos/flake.nix, but only if
     /// that file exists...
     #[clap(long, conflicts_with_all(["file", "attr", "no_flake"]))]
-    #[arg(value_parser = flake_parse, default_value_t = FlakeRefInput::default())]
+    #[arg(value_parser = flake_parse, default_value_t = FlakeRefInput::try_default().unwrap())]
     pub flake: FlakeRefInput,
     #[clap(long)]
     pub no_flake: bool,
