@@ -2,8 +2,6 @@ use std::{ffi::OsStr, fmt::Display, io};
 
 use camino::{Utf8Path, Utf8PathBuf};
 
-const DEFAULT_FILE_DIR: &str = "/etc/nixos";
-const DEFAULT_FLAKE_NIX: &str = "/etc/nixos/flake.nix";
 #[derive(Debug, Clone)]
 pub struct FlakeDir<T: AsRef<Utf8Path>> {
     canoned_dir: T,
@@ -30,7 +28,7 @@ impl FlakeDir<Utf8PathBuf> {
     /// contained flake.nix is a regular file: returned path matches current
     /// cantained flake.nix sym-links to anything other than regular file named `flake.nix`: None
     /// contained flake.nix links to regular file named `flake.nix`: said files parent directory
-    pub fn try_from_path<T: AsRef<Utf8Path>>(value: T) -> Result<Self, io::Error> {
+    pub fn try_from_path<T: AsRef<Utf8Path>>(value: T) -> io::Result<Self> {
         if !value.as_ref().is_dir() {
             return Err(io::Error::new(
                 io::ErrorKind::Other,
@@ -39,18 +37,15 @@ impl FlakeDir<Utf8PathBuf> {
         }
 
         let flake_loc = value.as_ref().join("flake.nix");
-        let flake_exists = match std::fs::exists(&flake_loc) {
-            Ok(exists) => exists,
-            Err(e) => {
-                return Err(io::Error::new(
-                    io::ErrorKind::Other,
-                    format!(
-                        "Error when checking for existence of flake at {}: {}",
-                        flake_loc, e
-                    ),
-                ));
-            }
-        };
+        let flake_exists = std::fs::exists(&flake_loc).map_err(|e| {
+            io::Error::new(
+                io::ErrorKind::Other,
+                format!(
+                    "Error when checking for existence of flake at {}: {}",
+                    flake_loc, e
+                ),
+            )
+        })?;
 
         if !flake_exists {
             return Err(io::Error::new(
@@ -59,15 +54,13 @@ impl FlakeDir<Utf8PathBuf> {
             ));
         }
 
-        let canoned_path = match std::fs::canonicalize(&flake_loc) {
-            Ok(path) => path,
-            Err(e) => {
-                return Err(io::Error::new(
-                    io::ErrorKind::Other,
-                    format!("Could not canonicalise path {}: {}", flake_loc, e),
-                ));
-            }
-        };
+        let canoned_path = std::fs::canonicalize(&flake_loc).map_err(|e| {
+            io::Error::new(
+                io::ErrorKind::Other,
+                format!("Could not canonicalise path {}: {}", flake_loc, e),
+            )
+        })?;
+
         if canoned_path.is_dir() {
             return Err(io::Error::new(
                 io::ErrorKind::Other,
@@ -89,21 +82,19 @@ impl FlakeDir<Utf8PathBuf> {
             ));
         }
 
-        let Some(res) = canoned_path.parent() else {
-            return Err(io::Error::new(
-                io::ErrorKind::Other,
-                format!(
-                    "Could not resolve to directory from {}",
-                    canoned_path.display()
-                ),
-            ));
-        };
-        let Ok(res) = Utf8PathBuf::from_path_buf(res.to_path_buf()) else {
-            return Err(io::Error::new(
+        let res = canoned_path.parent().ok_or(io::Error::new(
+            io::ErrorKind::Other,
+            format!(
+                "Could not resolve to directory from {}",
+                canoned_path.display()
+            ),
+        ))?;
+        let res = Utf8PathBuf::from_path_buf(res.to_path_buf()).map_err(|e| {
+            io::Error::new(
                 io::ErrorKind::Other,
                 format!("Invalid utf8: {}", res.display()),
-            ));
-        };
+            )
+        })?;
 
         Ok(Self { canoned_dir: res })
     }

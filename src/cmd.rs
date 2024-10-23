@@ -1,3 +1,5 @@
+use std::io::{self, ErrorKind};
+
 use camino::{Utf8Path, Utf8PathBuf};
 use clap::{Args, Parser, Subcommand};
 
@@ -202,24 +204,30 @@ impl AllArgs {
     }
 }
 
+#[allow(clippy::unnecessary_wraps, reason = "result needed for parser")]
 fn profile_name_parse(prof_name: &str) -> Result<Utf8PathBuf, String> {
-    let root_str = "/nix/var/nix/profiles";
-    let prof_root = Utf8Path::new(root_str);
-    let mut path_buff = Utf8PathBuf::from(prof_root);
-    path_buff.push("system-profiles");
-    path_buff.push(prof_name);
-    Ok(path_buff)
+    Ok(Utf8Path::new("/nix/var/nix/profiles/system-profiles").join(prof_name))
 }
-fn file_exists(path: &str) -> Result<Utf8PathBuf, String> {
+
+fn file_exists(path: &str) -> io::Result<Utf8PathBuf> {
     let path = Utf8PathBuf::from(path);
     if !path.exists() {
-        return Err(format!("File does not exist: {}", path.as_str()));
+        return Err(io::Error::new(
+            ErrorKind::NotFound,
+            format!("File does not exist: {}", path.as_str()),
+        ));
     }
     if !path.is_file() {
-        return Err(format!("Not a file: {}", path.as_str()));
+        return Err(io::Error::new(
+            ErrorKind::Other,
+            format!("Not a file: {}", path.as_str()),
+        ));
     }
     if !matches!(path.extension(), Some("nix")) {
-        return Err("Requires '.nix' extension".to_string());
+        return Err(io::Error::new(
+            ErrorKind::Other,
+            "Requires '.nix' extension".to_string(),
+        ));
     }
     Ok(path)
 }

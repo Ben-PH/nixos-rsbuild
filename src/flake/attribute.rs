@@ -10,7 +10,7 @@ pub struct FlakeAttr {
 
 impl FlakeAttr {
     fn set_config(&mut self) {
-        if self.attr_path.get(0).map(String::as_str) != Some("nixosConfigurations") {
+        if self.attr_path.first().map(String::as_str) != Some("nixosConfigurations") {
             self.attr_path.insert(0, "nixosConfigurations".to_string());
         }
         if self.attr_path.len() > 1 {
@@ -27,6 +27,9 @@ impl FlakeAttr {
         self.attr_path
             .extend_from_slice(&["config", "system", "build", "toplevel"].map(String::from));
     }
+    pub fn len(&self) -> usize {
+        self.attr_path.len()
+    }
 }
 
 /// "" -> Error
@@ -34,10 +37,10 @@ impl FlakeAttr {
 /// "contains#hash" -> Error
 /// "foo" -> [foo]
 /// "foo.bar" -> [foo, bar]
-impl TryFrom<String> for FlakeAttr {
-    type Error = String;
+impl<'a> TryFrom<&'a str> for FlakeAttr {
+    type Error = &'a str;
 
-    fn try_from(value: String) -> Result<Self, Self::Error> {
+    fn try_from(value: &'a str) -> Result<Self, Self::Error> {
         if value.contains('#') || value.contains('"') || value.is_empty() {
             log::trace!("malformed attr: {}", value);
             return Err(value);

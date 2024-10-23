@@ -38,7 +38,8 @@ fn main() -> Result<(), Box<dyn Error>> {
     {
         log::trace!("getting full flake");
         let full_flake = flake.init_flake_ref()?;
-        full_flake.build(None);
+        let out_link = full_flake.build(None)?;
+        log::trace!("outlink: {}", out_link);
         return Ok(());
     }
 
@@ -88,7 +89,7 @@ fn initial_init() -> Result<SubCommand, Box<dyn Error>> {
                 rec.args()
             )
         })
-        .filter_level(log::LevelFilter::Trace)
+        .filter_level(log::LevelFilter::Error)
         .init();
 
     // parse out cli args into a structured encapsulation
