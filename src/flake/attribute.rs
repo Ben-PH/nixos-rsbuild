@@ -11,6 +11,13 @@ pub struct FlakeAttr {
 impl FlakeAttr {
     /// Prepends `nixosConfigurations` if not already. sets hostname to a `hostname` read, falling
     /// back to default.
+    /// ```
+    /// use nixos_rsbuild::flake::FlakeAttr;
+    /// let mut attr = FlakeAttr{attr_path: vec!["foo".into()]};
+    /// assert_eq!("foo", attr.to_string());
+    /// attr.set_config().unwrap();
+    /// assert_eq!("nixosConfigurations.foo", attr.to_string());
+    /// ```
     pub fn set_config(&mut self) -> io::Result<()> {
         log::info!("trying to prepend nixosConfigurations");
         if self.attr_path.first().map(String::as_str) != Some("nixosConfigurations") {
@@ -34,6 +41,13 @@ impl FlakeAttr {
 
     /// appends the attribute path `.config.system.build.toplivel`, i.e. the path used when running
     /// the standard build: `nixosConfigurations.<hostname>.config....`
+    /// ```
+    /// use nixos_rsbuild::flake::FlakeAttr;
+    /// let mut attr = FlakeAttr{attr_path: vec!["foo".into()]};
+    /// assert_eq!("foo", attr.to_string());
+    /// attr.route_to_toplevel();
+    /// assert_eq!("foo.config.system.build.toplevel", attr.to_string());
+    /// ```
     pub fn route_to_toplevel(&mut self) {
         self.attr_path
             .extend_from_slice(&["config", "system", "build", "toplevel"].map(String::from));
@@ -65,6 +79,13 @@ impl FlakeAttr {
 impl TryFrom<String> for FlakeAttr {
     type Error = String;
 
+    /// ```
+    /// use nixos_rsbuild::flake::FlakeAttr;
+    /// let mut attr = FlakeAttr::try_from("foo.bar".to_string()).unwrap();
+    /// assert_eq!("foo.bar", attr.to_string());
+    /// let mut attr = FlakeAttr::try_from("#foo.bar".to_string()).unwrap_err();
+    /// assert_eq!("#foo.bar", attr);
+    /// ```
     fn try_from(value: String) -> Result<Self, Self::Error> {
         if value.contains('#') || value.contains('"') || value.is_empty() {
             log::trace!("malformed attr: {}", value);
