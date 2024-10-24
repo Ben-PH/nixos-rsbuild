@@ -51,7 +51,10 @@ impl FlakeDir<Utf8PathBuf> {
         if !flake_exists {
             return Err(io::Error::new(
                 io::ErrorKind::Other,
-                "flake-path must be a directory containing `flake.nix`.",
+                format!(
+                    "flake-path must be a directory containing `flake.nix`: {}.",
+                    value.as_ref()
+                ),
             ));
         }
 

@@ -30,10 +30,12 @@ If you are reading this, you are probably a Nix/NixOS nerd. If you are curious a
 
 #### Roadmap
 
-NOTE: `<flake-uri>` => `/path/to/dir#flake.attr`
+NOTE: `<flakeref>` => `/path/to/dir#flake.attr`
 
 1. [x] `nixos-rsbuild list-generations [--json]`
-2. [ ] `nixos-rebuild boot --flake <flake-uri>` -> `nixos-rs boot <flake-uri>`
+1. [x] `nixos-rsbuild build`
+1. [x] `nixos-rsbuild build --flake /path/to#machine_name`
+2. [ ] `nixos-rebuild boot --flake <flakeref>` -> `nixos-rs boot <flakeref>`
 3. [ ] `nixos-rebuild boot` -> `nixos-rsbuild boot --config`
 4. [ ] `nixos-rebuild test ...` -> `nixos-rsbuild test ...`
 5. [ ] `nixos-rebuild switch ...` -> `nixos-rsbuild switch ...`
@@ -41,10 +43,10 @@ NOTE: `<flake-uri>` => `/path/to/dir#flake.attr`
 
 #### TODOs
 
- - [ ] split out things into a library to leverage `cargo doc`
+ - [x] split out things into a library to leverage `cargo doc`
  - [ ] add `no_op` feature so as to only emulate changes in the output
  - [ ] black-box testing
- - [ ] white-box testing
+ - [x] white-box testing
  - [ ] system-level testing
  - [ ] non-local target-aware
  - [ ] non-local builde-aware
