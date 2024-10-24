@@ -28,11 +28,7 @@ use std::{
 use clap::Parser;
 use cmd::{AllArgs, Cli, SubCommand};
 use list_generations::GenerationMeta;
-
-mod cmd;
-mod flake;
-mod list_generations;
-pub mod utils;
+use nixos_rsbuild::{cmd, list_generations};
 
 fn main() -> Result<(), Box<dyn Error>> {
     let cli = initial_init()?;
@@ -56,7 +52,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     {
         log::trace!("getting full flake");
         let full_flake = flake.init_flake_ref()?;
-        let out_link = full_flake.build(None)?;
+        let out_link = full_flake.build_cmd(None)?.spawn()?.wait()?;
         log::trace!("outlink: {}", out_link);
         return Ok(());
     }

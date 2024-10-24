@@ -124,12 +124,11 @@ impl TryFrom<&Path> for GenerationMeta {
         let parsed_kern_ver = Self::kernel_version(gen_dir)?;
         log::trace!("kernel version: {}", parsed_kern_ver);
 
-        let mut cfg_command = Command::new(gen_dir.join("sw/bin/nixos-version"));
-        let cfg_command = cfg_command.arg("--configuration-revision");
-        let cfg_cmd_res = crate::run_cmd(cfg_command)
-            .map_err(|_| "Getting cfg revision failed".to_string())?
-            .status
-            .success();
+        // let mut cfg_command = Command::new(gen_dir.join("sw/bin/nixos-version"));
+        // let cfg_command = cfg_command.arg("--configuration-revision");
+        // let _cfg_cmd_res = cfg_command.spawn().unwrap().wait()
+        //     .map_err(|_| "Getting cfg revision failed".to_string())?
+        //     .success();
 
         let spec_ls = std::fs::read_dir(gen_dir.join("specialisation")).unwrap();
         log::trace!("read dir of specs");

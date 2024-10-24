@@ -1,4 +1,3 @@
-use crate::{cmd::SubCommand, run_cmd};
 use camino::{Utf8Path, Utf8PathBuf};
 use flake_path::FlakeDir;
 use std::{
@@ -57,7 +56,7 @@ impl Display for FlakeRef {
 }
 
 impl FlakeRef {
-    pub fn build(&self, out_dir: Option<&Utf8Path>) -> io::Result<Utf8PathBuf> {
+    pub fn build_cmd(&self, out_dir: Option<&Utf8Path>) -> io::Result<CliCommand> {
         log::info!("Building in flake mode.");
 
         if let Some(out_dir) = out_dir {
@@ -77,14 +76,15 @@ impl FlakeRef {
             "--out-link",
             out_dir.as_str(),
         ]);
-        run_cmd(&mut cmd);
-        let path = std::fs::canonicalize(out_dir)?;
-        Utf8PathBuf::from_path_buf(path).map_err(|e| {
-            io::Error::new(
-                io::ErrorKind::Other,
-                format!("invalud utf in canonicalised path {}", e.display()),
-            )
-        })
+        Ok(cmd)
+        // run_cmd(&mut cmd);
+        // let path = std::fs::canonicalize(out_dir)?;
+        // Utf8PathBuf::from_path_buf(path).map_err(|e| {
+        //     io::Error::new(
+        //         io::ErrorKind::Other,
+        //         format!("invalud utf in canonicalised path {}", e.display()),
+        //     )
+        // })
     }
 }
 
