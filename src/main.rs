@@ -105,7 +105,7 @@ fn initial_init() -> Result<SubCommand, Box<dyn Error>> {
                 rec.args()
             )
         })
-        .filter_level(log::LevelFilter::Error)
+        .filter_level(log::LevelFilter::Info)
         .init();
 
     // parse out cli args into a structured encapsulation

@@ -52,9 +52,7 @@ impl TryFrom<&Path> for GenNumber {
                 ErrorKind::InvalidInput,
                 format!("Invalid Utf8 at {}", gen_link.display()),
             ))?;
-        // else {
-        //     return Err(format!("no file in {}", gen_link.display()));
-        // };
+
         if !base.starts_with("system-") || !base.ends_with("-link") {
             return Err(io::Error::new(
                 ErrorKind::InvalidInput,
@@ -83,7 +81,7 @@ pub struct GenerationMeta {
     nixos_version: NixosVersion,
     kernel_version: Version,
     cfg_revision: Option<String>,
-    specialisation: Vec<String>,
+    specialisations: Vec<String>,
 }
 #[derive(Debug, Serialize)]
 pub struct NumberedGenMeta {
@@ -141,24 +139,30 @@ impl TryFrom<&Path> for GenerationMeta {
         let parsed_kern_ver = Self::kernel_version(gen_dir)?;
         log::trace!("kernel version: {}", parsed_kern_ver);
 
-        // let mut cfg_command = Command::new(gen_dir.join("sw/bin/nixos-version"));
-        // let cfg_command = cfg_command.arg("--configuration-revision");
-        // let _cfg_cmd_res = cfg_command.spawn().unwrap().wait()
-        //     .map_err(|_| "Getting cfg revision failed".to_string())?
-        //     .success();
+        let mut cfg_command = Command::new(gen_dir.join("sw/bin/nixos-version"));
+        let cfg_command = cfg_command.arg("--configuration-revision");
+        let cfg_cmd_res = cfg_command.output()?.stdout;
+        let cfg_revision = if !cfg_cmd_res.is_empty() {
+            Some(String::from_utf8(cfg_cmd_res).unwrap())
+        } else {
+            None
+        };
 
-        let spec_ls = std::fs::read_dir(gen_dir.join("specialisation")).unwrap();
-        log::trace!("read dir of specs");
-        for ent in spec_ls {
-            log::info!("spec: {:?}", ent.unwrap().path().file_name());
-        }
+        let specialisations = std::fs::read_dir(gen_dir.join("specialisation"))?
+            // Filter out the error direntries
+            .filter_map(Result::ok)
+            // get the path
+            .map(|e| e.path())
+            // stringify
+            .map(|d| format!("{}", d.display()))
+            .collect();
 
         Ok(GenerationMeta {
             build_time,
             nixos_version: NixosVersion(nixos_ver),
             kernel_version: parsed_kern_ver,
-            cfg_revision: None,
-            specialisation: vec![],
+            cfg_revision,
+            specialisations,
         })
     }
 }

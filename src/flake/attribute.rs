@@ -1,8 +1,4 @@
-use std::{
-    ffi::{OsStr, OsString},
-    io,
-    path::Path,
-};
+use std::{ffi::OsString, io};
 
 /// Contains ordered collection of an attribute path.
 ///
@@ -15,7 +11,8 @@ pub struct FlakeAttr {
 impl FlakeAttr {
     /// Prepends `nixosConfigurations` if not already. sets hostname to a `hostname` read, falling
     /// back to default.
-    fn set_config(&mut self) -> io::Result<()> {
+    pub fn set_config(&mut self) -> io::Result<()> {
+        log::info!("trying to prepend nixosConfigurations");
         if self.attr_path.first().map(String::as_str) != Some("nixosConfigurations") {
             self.attr_path.insert(0, "nixosConfigurations".to_string());
         }
@@ -23,9 +20,13 @@ impl FlakeAttr {
             return Ok(());
         }
 
-        let machine_name: String = hostname::get()?.into_string().map_err(|os| {
-            io::Error::new(io::ErrorKind::Other, "Could not read utf8-valid hostname")
-        })?;
+        let machine_name: String = hostname::get()
+            .unwrap_or(OsString::from("default"))
+            .into_string()
+            .map_err(|_os| {
+                io::Error::new(io::ErrorKind::Other, "Could not read utf8-valid hostname")
+            })?;
+        log::info!("pushing {} attr", machine_name);
         self.attr_path.push(machine_name);
         log::trace!("Flake attr: {}", self);
         Ok(())
@@ -39,6 +40,9 @@ impl FlakeAttr {
     }
     pub fn len(&self) -> usize {
         self.attr_path.len()
+    }
+    pub fn is_empty(&self) -> bool {
+        self.attr_path.is_empty()
     }
     pub fn try_default() -> io::Result<Self> {
         let attr = hostname::get()?.into_string().map_err(|_| {

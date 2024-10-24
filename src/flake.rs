@@ -4,7 +4,6 @@ use std::{
     ffi::OsStr,
     fmt::Display,
     io::{self, ErrorKind},
-    path::Path,
     process::Command as CliCommand,
 };
 
@@ -26,7 +25,7 @@ impl Display for FlakeRefInput {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.source)?;
         if let Some(attr_path) = &self.output_selector {
-            if attr_path.len() > 0 {
+            if !attr_path.is_empty() {
                 write!(f, "#{}", attr_path)?;
             }
         }
@@ -47,7 +46,7 @@ impl Display for FlakeRef {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.source)?;
         if let Some(output) = &self.output_selector {
-            if output.len() > 0 {
+            if output.is_empty() {
                 write!(f, "#{}", output)?;
             }
         }
@@ -69,7 +68,7 @@ impl FlakeRef {
         }
 
         let out_dir = out_dir.unwrap_or(Utf8Path::new(".")).join("result");
-        let mut cmd = CliCommand::new("nom");
+        let mut cmd = CliCommand::new("nix");
         cmd.args([
             "build",
             self.to_string().as_str(),
@@ -109,12 +108,17 @@ impl FlakeRefInput {
     ///
     /// TODO: Error-out if derived hostname is not present in `nixosConfigurations`
     pub fn init_flake_ref(&self) -> io::Result<FlakeRef> {
+        log::info!("init flake ref");
         let path = FlakeDir::try_from_path(&self.source)?;
         let mut attr = self
             .output_selector
             .clone()
             .unwrap_or(FlakeAttr::try_default()?);
+        log::info!("attr: {}", attr);
+        attr.set_config()?;
+        log::info!("attr: {}", attr);
         attr.route_to_toplevel();
+        log::info!("attr: {}", attr);
 
         Ok(FlakeRef {
             source: path,
@@ -171,7 +175,8 @@ impl TryFrom<&str> for FlakeRefInput {
         let stripped_attr = &hsh_attr[1..];
 
         // parse "bar" into `FlakeAttr(["path","to", "bar"])`
-        let attr = FlakeAttr::try_from(stripped_attr.to_string()).map_err(|e| value.to_string())?;
+        let attr =
+            FlakeAttr::try_from(stripped_attr.to_string()).map_err(|_e| value.to_string())?;
 
         // jobs-done!
         Ok(FlakeRefInput {
