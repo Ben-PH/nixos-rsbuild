@@ -1,4 +1,8 @@
-use std::{ffi::OsString, io, path::Path};
+use std::{
+    ffi::{OsStr, OsString},
+    io,
+    path::Path,
+};
 
 /// Contains ordered collection of an attribute path.
 ///
@@ -11,18 +15,20 @@ pub struct FlakeAttr {
 impl FlakeAttr {
     /// Prepends `nixosConfigurations` if not already. sets hostname to a `hostname` read, falling
     /// back to default.
-    fn set_config(&mut self) {
+    fn set_config(&mut self) -> io::Result<()> {
         if self.attr_path.first().map(String::as_str) != Some("nixosConfigurations") {
             self.attr_path.insert(0, "nixosConfigurations".to_string());
         }
         if self.attr_path.len() > 1 {
-            return;
+            return Ok(());
         }
 
-        let machine_name = crate::utils::read_fst_line(Path::new("/proc/sys/kernel/hostname"))
-            .unwrap_or("default".to_string());
+        let machine_name: String = hostname::get()?.into_string().map_err(|os| {
+            io::Error::new(io::ErrorKind::Other, "Could not read utf8-valid hostname")
+        })?;
         self.attr_path.push(machine_name);
         log::trace!("Flake attr: {}", self);
+        Ok(())
     }
 
     /// appends the attribute path `.config.system.build.toplivel`, i.e. the path used when running
