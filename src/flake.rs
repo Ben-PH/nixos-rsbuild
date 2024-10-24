@@ -76,14 +76,6 @@ impl FlakeRef {
             out_dir.as_str(),
         ]);
         Ok(cmd)
-        // run_cmd(&mut cmd);
-        // let path = std::fs::canonicalize(out_dir)?;
-        // Utf8PathBuf::from_path_buf(path).map_err(|e| {
-        //     io::Error::new(
-        //         io::ErrorKind::Other,
-        //         format!("invalud utf in canonicalised path {}", e.display()),
-        //     )
-        // })
     }
 }
 
@@ -108,17 +100,15 @@ impl FlakeRefInput {
     ///
     /// TODO: Error-out if derived hostname is not present in `nixosConfigurations`
     pub fn init_flake_ref(&self) -> io::Result<FlakeRef> {
-        log::info!("init flake ref");
         let path = FlakeDir::try_from_path(&self.source)?;
+
         let mut attr = self
             .output_selector
             .clone()
             .unwrap_or(FlakeAttr::try_default()?);
-        log::info!("attr: {}", attr);
+
         attr.set_config()?;
-        log::info!("attr: {}", attr);
         attr.route_to_toplevel();
-        log::info!("attr: {}", attr);
 
         Ok(FlakeRef {
             source: path,
