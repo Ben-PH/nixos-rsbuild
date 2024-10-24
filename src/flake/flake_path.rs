@@ -4,7 +4,8 @@ use camino::{Utf8Path, Utf8PathBuf};
 
 #[derive(Debug, Clone)]
 pub struct FlakeDir<T: AsRef<Utf8Path>> {
-    canoned_dir: T,
+    // todo make private. is currently public for the purpose of testing
+    pub canoned_dir: T,
 }
 
 impl<T: AsRef<Utf8Path>> Display for FlakeDir<T> {

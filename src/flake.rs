@@ -46,7 +46,7 @@ impl Display for FlakeRef {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.source)?;
         if let Some(output) = &self.output_selector {
-            if output.is_empty() {
+            if !output.is_empty() {
                 write!(f, "#{}", output)?;
             }
         }
@@ -173,5 +173,80 @@ impl TryFrom<&str> for FlakeRefInput {
             source: Utf8PathBuf::from(path),
             output_selector: Some(attr),
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+
+    use super::*;
+    #[test]
+    fn flake_ref_display() {
+        let mut data = FlakeRef {
+            source: FlakeDir {
+                canoned_dir: Utf8PathBuf::from("/fizz/buzz"),
+            },
+            output_selector: None,
+        };
+
+        assert_eq!(format!("{}", data), "/fizz/buzz");
+        data.output_selector = Some(FlakeAttr { attr_path: vec![] });
+        assert_eq!(format!("{}", data), "/fizz/buzz");
+        data.output_selector = Some(FlakeAttr {
+            attr_path: vec!["foo".into()],
+        });
+        assert_eq!(format!("{}", data), "/fizz/buzz#foo");
+        data.output_selector = Some(FlakeAttr {
+            attr_path: vec!["foo".into(), "bar".into()],
+        });
+        assert_eq!(format!("{}", data), "/fizz/buzz#foo.bar");
+        data.source.canoned_dir = Utf8PathBuf::from("/bop/pow/");
+        assert_eq!(format!("{}", data), "/bop/pow/#foo.bar");
+    }
+
+    #[test]
+    fn flake_ref_try_from() {
+        let assert = |s| {
+            let data = FlakeRefInput::try_from(s).unwrap();
+            assert_eq!(data.to_string(), s);
+        };
+
+        assert("/fizz/buzz");
+        assert("/fizz/buzz/");
+        assert("/fizz/buzz#foo");
+        assert("/fizz/buzz#foo.bar");
+        assert!(FlakeRefInput::try_from("/fizz/buzz#").is_err());
+        assert!(FlakeRefInput::try_from("/fizz/buzz#foo#").is_err());
+        assert!(FlakeRefInput::try_from(r#"/fizz/buzz#foo""#).is_err());
+    }
+
+    #[test]
+    fn flake_build_cmd() {
+        let data = FlakeRef {
+            source: FlakeDir {
+                canoned_dir: Utf8PathBuf::from("/fizz/buzz"),
+            },
+            output_selector: Some(FlakeAttr {
+                attr_path: vec!["fizz".into()],
+            }),
+        };
+
+        let cmd = data.build_cmd(None).unwrap();
+        assert_eq!(
+            format!("{:?}", cmd),
+            r#""nix" "build" "/fizz/buzz#fizz" "--out-link" "./result""#
+        );
+        let tmp = tempfile::tempdir_in(".").unwrap();
+        let tmp = tmp.path();
+        let cmd = data
+            .build_cmd(Some(Utf8Path::from_path(tmp).unwrap()))
+            .unwrap();
+        assert_eq!(
+            format!("{:?}", cmd),
+            format!(
+                r#""nix" "build" "/fizz/buzz#fizz" "--out-link" "{}/result""#,
+                tmp.display()
+            )
+        );
     }
 }

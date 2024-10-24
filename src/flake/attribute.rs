@@ -3,9 +3,9 @@ use std::{ffi::OsString, io};
 /// Contains ordered collection of an attribute path.
 ///
 /// e.g. when using `--flake /path/to/dir#fizz.buzz`, this will be [fizz, buzz] internally
-#[derive(Debug, Clone)]
+#[derive(Eq, PartialEq, Debug, Clone)]
 pub struct FlakeAttr {
-    attr_path: Vec<String>,
+    pub attr_path: Vec<String>,
 }
 
 impl FlakeAttr {
@@ -81,4 +81,45 @@ impl std::fmt::Display for FlakeAttr {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.attr_path.join("."))
     }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    #[test]
+    fn set_config() {
+        let hostname = hostname::get()
+            .unwrap_or(OsString::from("default"))
+            .into_string()
+            .unwrap();
+        let mut attr = FlakeAttr::try_from(hostname.clone()).unwrap();
+        assert_eq!(hostname, attr.to_string());
+        attr.set_config().unwrap();
+        assert_eq!(
+            format!("nixosConfigurations.{}", hostname),
+            attr.to_string()
+        );
+        attr.route_to_toplevel();
+        assert_eq!(
+            format!(
+                "nixosConfigurations.{}.config.system.build.toplevel",
+                hostname
+            ),
+            attr.to_string()
+        );
+    }
+    #[test]
+    fn try_from() {
+        assert!(FlakeAttr::try_from("fizz.bu\"".to_string()).is_err());
+        assert!(FlakeAttr::try_from("fizz.bu#".to_string()).is_err());
+        assert_eq!(
+            FlakeAttr::try_from("fizz.bu".to_string()).unwrap(),
+            FlakeAttr {
+                attr_path: vec!["fizz".to_string(), "bu".to_string()]
+            }
+        );
+        assert!(FlakeAttr::try_from("".to_string()).is_err());
+    }
+
+    // TODO: test try_default, when you can/cannot get hostname
 }

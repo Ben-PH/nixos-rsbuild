@@ -11,7 +11,6 @@ pub struct Cli {
     #[command(subcommand)]
     pub command: SubCommand,
 }
-const _DEFAULT_CONFG_NIX: &str = "/etc/nixos/configuration.nix";
 
 // TODO: split build and non-build commands
 #[derive(Subcommand, Debug)]
@@ -277,9 +276,5 @@ impl SubCommand {
             self,
             Self::Switch { .. } | Self::Boot { .. } | Self::Test { .. }
         )
-    }
-
-    fn _build_nix(&self) -> bool {
-        todo!()
     }
 }
