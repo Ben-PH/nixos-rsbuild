@@ -89,7 +89,7 @@ impl FlakeDir<Utf8PathBuf> {
                 canoned_path.display()
             ),
         ))?;
-        let res = Utf8PathBuf::from_path_buf(res.to_path_buf()).map_err(|e| {
+        let res = Utf8PathBuf::from_path_buf(res.to_path_buf()).map_err(|_e| {
             io::Error::new(
                 io::ErrorKind::Other,
                 format!("Invalid utf8: {}", res.display()),

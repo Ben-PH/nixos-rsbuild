@@ -3,7 +3,7 @@ use std::io::{self, ErrorKind};
 use camino::{Utf8Path, Utf8PathBuf};
 use clap::{Args, Parser, Subcommand};
 
-use crate::flake::{FlakeRef, FlakeRefInput};
+use crate::flake::FlakeRefInput;
 
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
@@ -140,7 +140,7 @@ pub struct AllArgs {
     /// TODO: if both flake and no-flake are unset, set flake to /etc/nixos/flake.nix, but only if
     /// that file exists...
     #[clap(long, conflicts_with_all(["file", "attr", "no_flake"]))]
-    #[arg(value_parser = flake_parse, default_value_t = FlakeRefInput::default())]
+    #[arg(value_parser = flake_parse, default_value_t = FlakeRefInput::try_default().unwrap())]
     pub flake: FlakeRefInput,
     #[clap(long)]
     pub no_flake: bool,
@@ -236,21 +236,6 @@ impl SubCommand {
     /// all but list-gens contains `AllArgs`.
     /// If this is already known not to be a ``ListGenerations`` run, you can unwrap this no problem.
     /// ...And that should be a flag to clean up the arg architecture, no?
-    fn inner_args_mut(&mut self) -> Option<&mut AllArgs> {
-        match self {
-            SubCommand::Switch { all, .. }
-            | SubCommand::Boot { all, .. }
-            | SubCommand::Test { all, .. }
-            | SubCommand::Build { all, .. }
-            | SubCommand::DryActivate { all }
-            | SubCommand::DryBuild { all }
-            | SubCommand::Edit { all }
-            | SubCommand::Repl { all }
-            | SubCommand::BuildVm { all }
-            | SubCommand::BuildVmWithBootloader { all } => Some(all),
-            SubCommand::ListGenerations { .. } => None,
-        }
-    }
     pub fn inner_args(&self) -> Option<&AllArgs> {
         match self {
             SubCommand::Switch { all, .. }
@@ -294,7 +279,7 @@ impl SubCommand {
         )
     }
 
-    fn build_nix(&self) -> bool {
+    fn _build_nix(&self) -> bool {
         todo!()
     }
 }

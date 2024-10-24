@@ -1,20 +1,34 @@
+//! As per description, is a reimpl of nixos-rebuild with room for opinionation.
+//!
+//! If you are at a "Rust Curious" level, and find this code base esoteric, please raise an issue on
+//! github. We aren't here to gate-keep, or make the learning curve of Rust any steeper than it
+//! needs to be.
+//!
+//! Some hints to read through the codebase:
+//!
+//!  - You'll often find relatively esoteric rust idioms, particularly with the deep functional
+//!    mappings, chainings, etc. Read the comments, take your time.
+//!  - Use LSP for code navigation. goto definition, reference, type definition etc.
+//!  - Think in terms of types. The business logic is intended, as much as possible, to be
+//!    encapsulated at the type-level. lines-of-code is lower level impl detail.
+//!  - glhf
+
 #![warn(clippy::pedantic)]
 #![allow(clippy::uninlined_format_args)]
 #![allow(clippy::module_name_repetitions)]
 #![allow(unused)]
-use clap::Parser;
-use cmd::{AllArgs, Cli, SubCommand};
-use list_generations::GenerationMeta;
+
 use std::{
     collections::BTreeMap,
     error::Error,
     io::{self, Write},
     process::{Command as CliCommand, Output},
 };
-mod cmd;
-mod flake;
-mod list_generations;
-pub mod utils;
+
+use clap::Parser;
+use cmd::{AllArgs, Cli, SubCommand};
+use list_generations::GenerationMeta;
+use nixos_rsbuild::{cmd, list_generations};
 
 fn main() -> Result<(), Box<dyn Error>> {
     let cli = initial_init()?;
@@ -38,7 +52,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     {
         log::trace!("getting full flake");
         let full_flake = flake.init_flake_ref()?;
-        let out_link = full_flake.build(None)?;
+        let out_link = full_flake.build_cmd(None)?.spawn()?.wait()?;
         log::trace!("outlink: {}", out_link);
         return Ok(());
     }
@@ -68,6 +82,7 @@ fn initial_init() -> Result<SubCommand, Box<dyn Error>> {
         // TODO: this pre-empts automation. something to think about
         return Err("This program should not be run as root!".into());
     };
+
     // sanatise executable name
     let args = std::env::args();
     let mut args = args.peekable();
@@ -77,6 +92,7 @@ fn initial_init() -> Result<SubCommand, Box<dyn Error>> {
     if !fst.ends_with("nixos-rsbuild") {
         return Err("Cli args did not begin with a path to file named 'nixos-rsbuild'".into());
     };
+
     // initialise logger
     env_logger::Builder::new()
         .format(|buf, rec| {
@@ -89,7 +105,7 @@ fn initial_init() -> Result<SubCommand, Box<dyn Error>> {
                 rec.args()
             )
         })
-        .filter_level(log::LevelFilter::Error)
+        .filter_level(log::LevelFilter::Info)
         .init();
 
     // parse out cli args into a structured encapsulation

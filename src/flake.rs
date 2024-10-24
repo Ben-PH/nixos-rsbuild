@@ -1,11 +1,9 @@
-use crate::{cmd::SubCommand, run_cmd};
 use camino::{Utf8Path, Utf8PathBuf};
 use flake_path::FlakeDir;
 use std::{
     ffi::OsStr,
     fmt::Display,
     io::{self, ErrorKind},
-    path::Path,
     process::Command as CliCommand,
 };
 
@@ -27,7 +25,7 @@ impl Display for FlakeRefInput {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.source)?;
         if let Some(attr_path) = &self.output_selector {
-            if attr_path.len() > 0 {
+            if !attr_path.is_empty() {
                 write!(f, "#{}", attr_path)?;
             }
         }
@@ -48,7 +46,7 @@ impl Display for FlakeRef {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.source)?;
         if let Some(output) = &self.output_selector {
-            if output.len() > 0 {
+            if output.is_empty() {
                 write!(f, "#{}", output)?;
             }
         }
@@ -57,7 +55,7 @@ impl Display for FlakeRef {
 }
 
 impl FlakeRef {
-    pub fn build(&self, out_dir: Option<&Utf8Path>) -> io::Result<Utf8PathBuf> {
+    pub fn build_cmd(&self, out_dir: Option<&Utf8Path>) -> io::Result<CliCommand> {
         log::info!("Building in flake mode.");
 
         if let Some(out_dir) = out_dir {
@@ -70,21 +68,14 @@ impl FlakeRef {
         }
 
         let out_dir = out_dir.unwrap_or(Utf8Path::new(".")).join("result");
-        let mut cmd = CliCommand::new("nom");
+        let mut cmd = CliCommand::new("nix");
         cmd.args([
             "build",
             self.to_string().as_str(),
             "--out-link",
             out_dir.as_str(),
         ]);
-        run_cmd(&mut cmd);
-        let path = std::fs::canonicalize(out_dir)?;
-        Utf8PathBuf::from_path_buf(path).map_err(|e| {
-            io::Error::new(
-                io::ErrorKind::Other,
-                format!("invalud utf in canonicalised path {}", e.display()),
-            )
-        })
+        Ok(cmd)
     }
 }
 
@@ -93,15 +84,6 @@ impl FlakeRef {
 //         write!(f, "{}#{}", self.source.as_ref(), self.output_selector)
 //     }
 // }
-
-impl Default for FlakeRefInput {
-    fn default() -> Self {
-        Self {
-            source: Utf8PathBuf::from(crate::utils::DEFAULT_FILE_DIR),
-            output_selector: Some(FlakeAttr::default()),
-        }
-    }
-}
 
 impl FlakeRefInput {
     /// nixos-rsbuild will flakebuild, unless explicitly stated with the --no-flake flag
@@ -119,7 +101,13 @@ impl FlakeRefInput {
     /// TODO: Error-out if derived hostname is not present in `nixosConfigurations`
     pub fn init_flake_ref(&self) -> io::Result<FlakeRef> {
         let path = FlakeDir::try_from_path(&self.source)?;
-        let mut attr = self.output_selector.clone().unwrap_or_default();
+
+        let mut attr = self
+            .output_selector
+            .clone()
+            .unwrap_or(FlakeAttr::try_default()?);
+
+        attr.set_config()?;
         attr.route_to_toplevel();
 
         Ok(FlakeRef {
@@ -151,6 +139,12 @@ impl FlakeRefInput {
             Ok(dir)
         }
     }
+    pub fn try_default() -> io::Result<Self> {
+        Ok(Self {
+            source: Utf8PathBuf::from(crate::utils::DEFAULT_FILE_DIR),
+            output_selector: Some(FlakeAttr::try_default()?),
+        })
+    }
 }
 
 /// Takes a string and maps it to a flake-ref
@@ -171,7 +165,8 @@ impl TryFrom<&str> for FlakeRefInput {
         let stripped_attr = &hsh_attr[1..];
 
         // parse "bar" into `FlakeAttr(["path","to", "bar"])`
-        let attr = FlakeAttr::try_from(stripped_attr.to_string()).map_err(|e| value.to_string())?;
+        let attr =
+            FlakeAttr::try_from(stripped_attr.to_string()).map_err(|_e| value.to_string())?;
 
         // jobs-done!
         Ok(FlakeRefInput {
