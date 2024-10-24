@@ -2,7 +2,12 @@ use chrono::{DateTime, Utc};
 use semver::Version;
 use serde::{Serialize, Serializer};
 use serde_json::json;
-use std::{collections::BTreeMap, io, path::Path, process::Command};
+use std::{
+    collections::BTreeMap,
+    io::{self, ErrorKind},
+    path::Path,
+    process::Command,
+};
 
 use crate::cmd::SubCommand;
 
@@ -35,25 +40,39 @@ impl From<u32> for GenNumber {
 }
 
 impl TryFrom<&Path> for GenNumber {
-    type Error = String;
+    type Error = io::Error;
 
     /// e.g. /nix/var/nix/profiles/system-14-link -> 14
     fn try_from(gen_link: &Path) -> Result<Self, Self::Error> {
-        let Some(base) = gen_link.file_stem().and_then(|s| s.to_str()) else {
-            return Err(format!("no file in {}", gen_link.display()));
-        };
+        let base = gen_link
+            .file_name()
+            .ok_or(io::Error::new(ErrorKind::NotFound, "invalid dir: `..`"))?
+            .to_str()
+            .ok_or(io::Error::new(
+                ErrorKind::InvalidInput,
+                format!("Invalid Utf8 at {}", gen_link.display()),
+            ))?;
+        // else {
+        //     return Err(format!("no file in {}", gen_link.display()));
+        // };
         if !base.starts_with("system-") || !base.ends_with("-link") {
-            return Err(format!(
-                "file in {} must follow format 'system-X-link': {}",
-                gen_link.display(),
-                base
+            return Err(io::Error::new(
+                ErrorKind::InvalidInput,
+                format!(
+                    "file in {} must follow format 'system-X-link': {}",
+                    gen_link.display(),
+                    base
+                ),
             ));
         }
         let base_2 = base.trim_end_matches("-link");
         let base_3 = base_2.trim_start_matches("system-");
-        let res = base_3
-            .parse::<u32>()
-            .map_err(|e| format!("Failed conversion to u32: {}", e))?;
+        let res = base_3.parse::<u32>().map_err(|e| {
+            io::Error::new(
+                ErrorKind::InvalidInput,
+                format!("Failed conversion to u32: {}", e),
+            )
+        })?;
         Ok(Self { num: res })
     }
 }
@@ -106,12 +125,10 @@ impl From<(u32, GenerationMeta)> for NumberedGenMeta {
 /// Takes a file path to a generations dir. Typically `/nix/var/nix/profiles/system-x-link`, but
 /// its canonicalised path can be used as well
 impl TryFrom<&Path> for GenerationMeta {
-    type Error = String;
+    type Error = io::Error;
 
     fn try_from(gen_dir: &Path) -> Result<Self, Self::Error> {
-        let Ok(_cannoned_dir) = file_utils::CanonedStorePath::try_from(gen_dir) else {
-            return Err(format!("Could not canonicalise {}", gen_dir.display()));
-        };
+        let _cannoned_dir = file_utils::CanonedStorePath::try_from(gen_dir)?;
         let gen_number = GenNumber::try_from(gen_dir)?;
         log::trace!("gen-number {}", gen_number.num);
 
@@ -173,20 +190,15 @@ impl GenerationMeta {
         Ok(res)
     }
 
-    fn nixos_version(gen_dir: &Path) -> Result<String, String> {
+    fn nixos_version(gen_dir: &Path) -> io::Result<String> {
         let ver_dir = &gen_dir.join("nixos-version");
         log::trace!("ver-dir: {}", ver_dir.display());
-        crate::utils::read_fst_line(ver_dir).map_err(|_| "Could not read ver-dir".to_string())
+        crate::utils::read_fst_line(ver_dir)
     }
 
-    fn kernel_version(gen_dir: &Path) -> Result<Version, String> {
+    fn kernel_version(gen_dir: &Path) -> io::Result<Version> {
         // canonicalise
-        let mut kern_dir = std::fs::canonicalize(gen_dir.join("kernel")).map_err(|_| {
-            format!(
-                "Could not get canonicalised path to kernel dir from {}",
-                gen_dir.display()
-            )
-        })?;
+        let mut kern_dir = std::fs::canonicalize(gen_dir.join("kernel"))?;
 
         // only directories
         if !kern_dir.is_dir() {
@@ -194,15 +206,19 @@ impl GenerationMeta {
         }
 
         // `lib/modules/<kernel-version/`
-        let Some(Ok(kernel_ver_dir)) = std::fs::read_dir(kern_dir.join("lib/modules"))
-            .map_err(|_| "Could not read ker-ver-dir".to_string())?
+        let kernel_ver_dir = std::fs::read_dir(kern_dir.join("lib/modules"))?
             .next()
-        else {
-            return Err("could not get kvar dir".to_string());
-        };
+            .ok_or(io::Error::new(
+                ErrorKind::NotFound,
+                "could not find semverdir",
+            ))??;
 
-        semver::Version::parse(&kernel_ver_dir.file_name().into_string().unwrap())
-            .map_err(|_| "Could not parse ver-dir to semver".to_string())
+        semver::Version::parse(&kernel_ver_dir.file_name().into_string().unwrap()).map_err(|e| {
+            io::Error::new(
+                ErrorKind::InvalidData,
+                format!("could not parse semver from dirname: {}", e),
+            )
+        })
     }
 }
 
@@ -290,18 +306,9 @@ mod file_utils {
         }
     }
 
-    pub(super) fn creation_time(gen_dir: &Path) -> Result<DateTime<Utc>, String> {
-        std::fs::metadata(gen_dir)
-            .map(|md| {
-                md.created()
-                    .map_err(|_| "Platform not supported for getting creation time".to_string())
-            })
-            .map_err(|_| {
-                format!(
-                    "Cannot get creation time metadata from {}",
-                    gen_dir.display()
-                )
-            })?
+    pub(super) fn creation_time(gen_dir: &Path) -> io::Result<DateTime<Utc>> {
+        std::fs::metadata(gen_dir)?
+            .created()
             .map(DateTime::<Utc>::from)
     }
 }
