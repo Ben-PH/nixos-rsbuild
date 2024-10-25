@@ -9,7 +9,7 @@ use std::{
     process::Command,
 };
 
-use crate::cmd::SubCommand;
+use crate::cmd::{SubCommand, UtilSubCommand};
 
 const GEN_DIR: &str = "/nix/var/nix/profiles";
 
@@ -173,7 +173,12 @@ impl GenerationMeta {
     pub fn dispatch_cmd(
         cmd: &SubCommand,
     ) -> Option<io::Result<impl Iterator<Item = (GenNumber, Self)>>> {
-        if matches!(cmd, SubCommand::ListGenerations { .. }) {
+        if matches!(
+            cmd,
+            SubCommand::Util {
+                comm: UtilSubCommand::ListGenerations { .. }
+            }
+        ) {
             Some(Self::run_cmd())
         } else {
             None

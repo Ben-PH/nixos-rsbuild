@@ -22,13 +22,20 @@ use std::{
     collections::BTreeMap,
     error::Error,
     io::{self, Write},
-    process::{Command as CliCommand, Output},
+    path::{Path, PathBuf},
+    process::{Command as CliCommand, Output, Stdio},
+    string::ToString,
 };
 
+use camino::{Utf8Path, Utf8PathBuf};
 use clap::Parser;
 use cmd::{AllArgs, Cli, SubCommand};
 use list_generations::GenerationMeta;
-use nixos_rsbuild::{cmd, list_generations};
+use nixos_rsbuild::{
+    cmd::{self, BuildSubComms},
+    list_generations,
+};
+use tempdir::TempDir;
 
 fn main() -> Result<(), Box<dyn Error>> {
     let cli = initial_init()?;
@@ -41,19 +48,36 @@ fn main() -> Result<(), Box<dyn Error>> {
     }
 
     // plain flake build
-    if let SubCommand::Build {
-        all: AllArgs {
-            flake,
-            no_flake: false,
-            ..
-        },
-        ..
+    if let SubCommand::Builder {
+        comm,
+        arg,
+        // all: AllArgs {
+        //     flake,
+        //     no_flake: false,
+        //     ..
+        // },
+        // ..
     } = cli
     {
         log::trace!("getting full flake");
-        let full_flake = flake.init_flake_ref()?;
-        let out_link = full_flake.build_cmd(None)?.spawn()?.wait()?;
-        log::trace!("outlink: {}", out_link);
+        let use_td = arg.res_dir.is_none();
+        let full_flake = arg.flake.init_flake_ref()?;
+        let path = arg.res_dir.unwrap_or(
+            Utf8PathBuf::from_path_buf(TempDir::new("nixrsbuild-")?.into_path()).unwrap(),
+        );
+
+        let mut build_command = full_flake.build_cmd(path.as_path())?;
+        log::trace!("bcom: {:?}", build_command);
+        let comm_output = build_command.output()?;
+        log::trace!("com: {:?}", comm_output);
+        let out_link = path.join("result/bin/switch-to-configuration");
+
+        let local_arch = std::env::var_os("LOCALE_ARCHIVE").unwrap_or_default();
+        let task_str = comm.to_string();
+        cmd_lib::run_cmd!(
+            sudo bash -c "env -i LOCALE_ARCHIVE=$local_arch $out_link $task_str";
+        )?;
+
         return Ok(());
     }
 
@@ -62,13 +86,13 @@ fn main() -> Result<(), Box<dyn Error>> {
     log::trace!("using tmpdir: {}", tmpdir.path().display());
 
     // TODO: check for re-exec
-    let reexec_env = std::env::var("_NIXOS_REBUILD_REEXEC").unwrap_or_default();
-    if reexec_env.is_empty()
-        && cli.can_run()
-        && matches!(cli.inner_args(), Some(AllArgs { fast: false, .. }))
-    {
-        todo!("handle the reexec context")
-    }
+    // let reexec_env = std::env::var("_NIXOS_REBUILD_REEXEC").unwrap_or_default();
+    // if reexec_env.is_empty()
+    //     && cli.can_run()
+    //     && matches!(cli.inner_args(), Some(AllArgs { fast: false, .. }))
+    // {
+    //     todo!("handle the reexec context")
+    // }
 
     Ok(())
 }
@@ -105,7 +129,7 @@ fn initial_init() -> Result<SubCommand, Box<dyn Error>> {
                 rec.args()
             )
         })
-        .filter_level(log::LevelFilter::Info)
+        .filter_level(log::LevelFilter::Trace)
         .init();
 
     // parse out cli args into a structured encapsulation

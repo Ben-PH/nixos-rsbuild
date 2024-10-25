@@ -55,26 +55,17 @@ impl Display for FlakeRef {
 }
 
 impl FlakeRef {
-    pub fn build_cmd(&self, out_dir: Option<&Utf8Path>) -> io::Result<CliCommand> {
+    pub fn build_cmd(&self, out_dir: &Utf8Path) -> io::Result<CliCommand> {
         log::info!("Building in flake mode.");
 
-        if let Some(out_dir) = out_dir {
-            if !out_dir.is_dir() {
-                return Err(io::Error::new(
-                    io::ErrorKind::Other,
-                    format!("requested out dir not a directory: {}", out_dir),
-                ));
-            }
-        }
-
-        let out_dir = out_dir.unwrap_or(Utf8Path::new(".")).join("result");
-        let mut cmd = CliCommand::new("nix");
+        let mut cmd = CliCommand::new("nom");
         cmd.args([
             "build",
             self.to_string().as_str(),
             "--out-link",
-            out_dir.as_str(),
+            out_dir.join("result").as_str(),
         ]);
+        log::info!("created cmd: {:?}", cmd);
         Ok(cmd)
     }
 }

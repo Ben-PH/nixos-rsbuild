@@ -12,67 +12,38 @@ pub struct Cli {
     pub command: SubCommand,
 }
 
-// TODO: split build and non-build commands
-#[derive(Subcommand, Debug)]
-pub enum SubCommand {
+/// Commands that involve building: switch, test, boot, etc..
+#[derive(Subcommand, Debug, strum::Display)]
+#[strum(serialize_all = "kebab-case")]
+pub enum BuildSubComms {
     /// Build a config: Activate it, add it to boot-menu as default.
-    Switch {
-        #[clap(long, short = 'c')]
-        specialisation: Option<String>,
-        #[clap(flatten)]
-        all: AllArgs,
-        #[clap(flatten)]
-        rb: RbFlag,
-        // #[clap(flatten)]
-        // flake_args: Option<FlakeBuildArgs>,
-    },
+    Switch,
     /// Build a config, add it to boot-menu as default. Will not be activated.
-    Boot {
-        #[clap(flatten)]
-        all: AllArgs,
-        #[clap(flatten)]
-        rb: RbFlag,
-        // #[clap(flatten)]
-        // flake_args: Option<FlakeBuildArgs>,
-    },
+    Boot,
     /// Build and activate a config. Will not be added to boot-menu
-    Test {
-        #[clap(long, short = 'c')]
-        specialisation: Option<String>,
-        #[clap(flatten)]
-        all: AllArgs,
-        #[clap(flatten)]
-        rb: RbFlag,
-        // #[clap(flatten)]
-        // flake_args: Option<FlakeBuildArgs>,
-    },
+    Test,
     /// Build and sym-link only: No activation, or boot menu changes. Symlinks to configuration through `./result`.
     ///
     /// This is additional long-help
     /// This should not be shown under `-h`
     /// Only to be shown with `--help`
     /// the short help will also be shown under `--help`
-    Build {
-        #[clap(flatten)]
-        all: AllArgs,
-        #[clap(flatten)]
-        rb: RbFlag,
-        // #[clap(flatten)]
-        // flake_args: Option<FlakeBuildArgs>,
-    },
+    Build,
     /// Build config only. Show (possibly incomplete) list of changes that its activation
-    DryActivate {
-        #[clap(flatten)]
-        all: AllArgs,
-        // #[clap(flatten)]
-        // flake_args: Option<FlakeBuildArgs>,
-    },
+    DryActivate,
     /// No-op, but shows the build/download ops performed by an actual build
-    DryBuild {
-        #[clap(flatten)]
-        all: AllArgs,
-        // #[clap(flatten)]
-        // flake_args: Option<FlakeBuildArgs>,
+    DryBuild,
+    BuildVm,
+    BuildVmWithBootloader,
+}
+
+/// Commands such as `repl`, `list-generations`, etc
+#[derive(Subcommand, Debug)]
+pub enum UtilSubCommand {
+    ListGenerations {
+        #[clap(long)]
+        /// Outputs generations in json format
+        json: bool,
     },
     /// Opens `configuration.nix` in default editor.
     Edit {
@@ -84,24 +55,20 @@ pub enum SubCommand {
         #[clap(flatten)]
         all: AllArgs,
     },
-    BuildVm {
+}
+
+// TODO: split build and non-build commands
+#[derive(Subcommand, Debug)]
+pub enum SubCommand {
+    Builder {
+        #[command(subcommand)]
+        comm: BuildSubComms,
         #[clap(flatten)]
-        all: AllArgs,
-        // #[clap(flatten)]
-        // flake_args: Option<FlakeBuildArgs>,
+        arg: AllArgs,
     },
-    BuildVmWithBootloader {
-        #[clap(flatten)]
-        all: AllArgs,
-        // #[clap(flatten)]
-        // flake_args: Option<FlakeBuildArgs>,
-    },
-    /// Shows available generations. By default, similarly to boot-loader menu. Json output also
-    /// available
-    ListGenerations {
-        #[clap(long)]
-        /// Outputs generations in json format
-        json: bool,
+    Util {
+        #[command(subcommand)]
+        comm: UtilSubCommand,
     },
 }
 
@@ -147,6 +114,9 @@ pub struct AllArgs {
     /// Used to select an attrubite other than the default
     #[clap(long)]
     pub attr: Option<String>,
+    #[clap(long)]
+    /// For this build, sets the input file.
+    pub res_dir: Option<Utf8PathBuf>,
     // whet `--target-host` or `--build-host`, make this one availabel
     // #[clap(long, short = 's')]
     // use_substitutes: bool,
@@ -237,44 +207,17 @@ impl SubCommand {
     /// ...And that should be a flag to clean up the arg architecture, no?
     pub fn inner_args(&self) -> Option<&AllArgs> {
         match self {
-            SubCommand::Switch { all, .. }
-            | SubCommand::Boot { all, .. }
-            | SubCommand::Test { all, .. }
-            | SubCommand::Build { all, .. }
-            | SubCommand::DryActivate { all }
-            | SubCommand::DryBuild { all }
-            | SubCommand::Edit { all }
-            | SubCommand::Repl { all }
-            | SubCommand::BuildVm { all }
-            | SubCommand::BuildVmWithBootloader { all } => Some(all),
-            SubCommand::ListGenerations { .. } => None,
+            SubCommand::Builder { arg, .. } => Some(arg),
+            _ => None,
         }
     }
     pub fn building_attr(&self) -> bool {
         self.inner_args().is_some_and(AllArgs::building_attribute)
     }
-    pub fn _rollback(&self) -> bool {
-        matches!(
-            self,
-            SubCommand::Switch {
-                rb: RbFlag { rollback: true },
-                ..
-            } | SubCommand::Boot {
-                rb: RbFlag { rollback: true },
-                ..
-            } | SubCommand::Test {
-                rb: RbFlag { rollback: true },
-                ..
-            } | SubCommand::Build {
-                rb: RbFlag { rollback: true },
-                ..
-            }
-        )
-    }
-    pub fn can_run(&self) -> bool {
-        matches!(
-            self,
-            Self::Switch { .. } | Self::Boot { .. } | Self::Test { .. }
-        )
-    }
+    // pub fn can_run(&self) -> bool {
+    //     matches!(
+    //         self,
+    //         Self::Switch { .. } | Self::Boot { .. } | Self::Test { .. }
+    //     )
+    // }
 }
