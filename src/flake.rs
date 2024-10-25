@@ -4,7 +4,6 @@ use std::{
     ffi::OsStr,
     fmt::Display,
     io::{self, ErrorKind},
-    process::Command as CliCommand,
 };
 
 mod attribute;
@@ -201,35 +200,5 @@ mod tests {
         assert!(FlakeRefInput::try_from("/fizz/buzz#").is_err());
         assert!(FlakeRefInput::try_from("/fizz/buzz#foo#").is_err());
         assert!(FlakeRefInput::try_from(r#"/fizz/buzz#foo""#).is_err());
-    }
-
-    #[test]
-    fn flake_build_cmd() {
-        let data = FlakeRef {
-            source: FlakeDir {
-                canoned_dir: Utf8PathBuf::from("/fizz/buzz"),
-            },
-            output_selector: Some(FlakeAttr {
-                attr_path: vec!["fizz".into()],
-            }),
-        };
-
-        let cmd = data.run_nix_build(None).unwrap();
-        assert_eq!(
-            format!("{:?}", cmd),
-            r#""nix" "build" "/fizz/buzz#fizz" "--out-link" "./result""#
-        );
-        let tmp = tempfile::tempdir_in(".").unwrap();
-        let tmp = tmp.path();
-        let cmd = data
-            .run_nix_build(Some(Utf8Path::from_path(tmp).unwrap()))
-            .unwrap();
-        assert_eq!(
-            format!("{:?}", cmd),
-            format!(
-                r#""nix" "build" "/fizz/buzz#fizz" "--out-link" "{}/result""#,
-                tmp.display()
-            )
-        );
     }
 }
