@@ -9,7 +9,7 @@ use std::{
     process::Command,
 };
 
-use crate::cmd::SubCommand;
+use crate::cmd::{SubCommand, UtilSubCommand};
 
 const GEN_DIR: &str = "/nix/var/nix/profiles";
 
@@ -173,7 +173,12 @@ impl GenerationMeta {
     pub fn dispatch_cmd(
         cmd: &SubCommand,
     ) -> Option<io::Result<impl Iterator<Item = (GenNumber, Self)>>> {
-        if matches!(cmd, SubCommand::ListGenerations { .. }) {
+        if matches!(
+            cmd,
+            SubCommand::Util {
+                task: UtilSubCommand::ListGenerations { .. }
+            }
+        ) {
             Some(Self::run_cmd())
         } else {
             None
@@ -229,7 +234,7 @@ impl GenerationMeta {
 // General file utilities
 mod file_utils {
     use std::{
-        ffi::{OsStr, OsString},
+        ffi::OsStr,
         io,
         path::{Path, PathBuf},
     };
@@ -240,7 +245,8 @@ mod file_utils {
         Directory,
         ExtDrv,
         ExtMissing,
-        ExtOther(OsString),
+        // ExtOther(OsString),
+        ExtOther(()),
     }
     /// <https://nix.dev/manual/nix/2.24/protocols/store-path#store-path-proper>
     /// `/nix/store/<digest>-<name>`
@@ -250,7 +256,7 @@ mod file_utils {
         /// TODO: actually decode back to the 20 bytes...
         digest: String,
         name: String,
-        entry_type: StoreEntryType,
+        _entry_type: StoreEntryType,
     }
 
     impl TryFrom<&Path> for CanonedStorePath {
@@ -289,7 +295,7 @@ mod file_utils {
             } else {
                 match cannoned.extension().and_then(OsStr::to_str) {
                     Some("drv") => StoreEntryType::ExtDrv,
-                    Some(d) => StoreEntryType::ExtOther(d.into()),
+                    Some(_d) => StoreEntryType::ExtOther(()),
                     None => StoreEntryType::ExtMissing,
                 }
             };
@@ -299,7 +305,7 @@ mod file_utils {
             Ok(Self {
                 digest: digest.to_string(),
                 name,
-                entry_type,
+                _entry_type: entry_type,
             })
         }
     }

@@ -4,7 +4,6 @@ use std::{
     ffi::OsStr,
     fmt::Display,
     io::{self, ErrorKind},
-    process::Command as CliCommand,
 };
 
 mod attribute;
@@ -55,35 +54,18 @@ impl Display for FlakeRef {
 }
 
 impl FlakeRef {
-    pub fn build_cmd(&self, out_dir: Option<&Utf8Path>) -> io::Result<CliCommand> {
+    pub fn run_nix_build(&self, out_dir: &Utf8Path) -> io::Result<()> {
         log::info!("Building in flake mode.");
 
-        if let Some(out_dir) = out_dir {
-            if !out_dir.is_dir() {
-                return Err(io::Error::new(
-                    io::ErrorKind::Other,
-                    format!("requested out dir not a directory: {}", out_dir),
-                ));
-            }
-        }
-
-        let out_dir = out_dir.unwrap_or(Utf8Path::new(".")).join("result");
-        let mut cmd = CliCommand::new("nix");
-        cmd.args([
-            "build",
-            self.to_string().as_str(),
-            "--out-link",
-            out_dir.as_str(),
-        ]);
-        Ok(cmd)
+        let refstr = self.to_string();
+        let resfile = out_dir.join("result");
+        cmd_lib::spawn!(nix  build "$refstr" --out-link "$resfile")
+            .unwrap()
+            .wait()
+            .unwrap();
+        Ok(())
     }
 }
-
-// impl Display for FlakeRef {
-//     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-//         write!(f, "{}#{}", self.source.as_ref(), self.output_selector)
-//     }
-// }
 
 impl FlakeRefInput {
     /// nixos-rsbuild will flakebuild, unless explicitly stated with the --no-flake flag
@@ -218,35 +200,5 @@ mod tests {
         assert!(FlakeRefInput::try_from("/fizz/buzz#").is_err());
         assert!(FlakeRefInput::try_from("/fizz/buzz#foo#").is_err());
         assert!(FlakeRefInput::try_from(r#"/fizz/buzz#foo""#).is_err());
-    }
-
-    #[test]
-    fn flake_build_cmd() {
-        let data = FlakeRef {
-            source: FlakeDir {
-                canoned_dir: Utf8PathBuf::from("/fizz/buzz"),
-            },
-            output_selector: Some(FlakeAttr {
-                attr_path: vec!["fizz".into()],
-            }),
-        };
-
-        let cmd = data.build_cmd(None).unwrap();
-        assert_eq!(
-            format!("{:?}", cmd),
-            r#""nix" "build" "/fizz/buzz#fizz" "--out-link" "./result""#
-        );
-        let tmp = tempfile::tempdir_in(".").unwrap();
-        let tmp = tmp.path();
-        let cmd = data
-            .build_cmd(Some(Utf8Path::from_path(tmp).unwrap()))
-            .unwrap();
-        assert_eq!(
-            format!("{:?}", cmd),
-            format!(
-                r#""nix" "build" "/fizz/buzz#fizz" "--out-link" "{}/result""#,
-                tmp.display()
-            )
-        );
     }
 }
