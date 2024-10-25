@@ -48,15 +48,9 @@ fn main() -> Result<(), Box<dyn Error>> {
     }
 
     // plain flake build
-    if let SubCommand::Builder {
-        comm,
+    if let SubCommand::Builders {
+        task: comm,
         arg,
-        // all: AllArgs {
-        //     flake,
-        //     no_flake: false,
-        //     ..
-        // },
-        // ..
     } = cli
     {
         log::trace!("getting full flake");

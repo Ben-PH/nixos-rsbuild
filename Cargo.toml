@@ -15,7 +15,7 @@ The goals are as follows:
 """
 edition = "2021"
 keywords = [ "nixos", "nix" ]
-catagories = [ "command-line-utilities" ]
+# catagories = [ "command-line-utilities" ]
 license = "Unlicense OR MIT"
 
 

@@ -60,15 +60,15 @@ pub enum UtilSubCommand {
 // TODO: split build and non-build commands
 #[derive(Subcommand, Debug)]
 pub enum SubCommand {
-    Builder {
+    Builders {
         #[command(subcommand)]
-        comm: BuildSubComms,
+        task: BuildSubComms,
         #[clap(flatten)]
         arg: AllArgs,
     },
     Util {
         #[command(subcommand)]
-        comm: UtilSubCommand,
+        task: UtilSubCommand,
     },
 }
 
@@ -207,7 +207,7 @@ impl SubCommand {
     /// ...And that should be a flag to clean up the arg architecture, no?
     pub fn inner_args(&self) -> Option<&AllArgs> {
         match self {
-            SubCommand::Builder { arg, .. } => Some(arg),
+            SubCommand::Builders { arg, .. } => Some(arg),
             _ => None,
         }
     }
