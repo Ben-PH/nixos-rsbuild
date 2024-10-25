@@ -55,26 +55,18 @@ impl Display for FlakeRef {
 }
 
 impl FlakeRef {
-    pub fn build_cmd(&self, out_dir: &Utf8Path) -> io::Result<CliCommand> {
+    pub fn run_nix_build(&self, out_dir: &Utf8Path) -> io::Result<()> {
         log::info!("Building in flake mode.");
 
-        let mut cmd = CliCommand::new("nom");
-        cmd.args([
-            "build",
-            self.to_string().as_str(),
-            "--out-link",
-            out_dir.join("result").as_str(),
-        ]);
-        log::info!("created cmd: {:?}", cmd);
-        Ok(cmd)
+        let refstr = self.to_string();
+        let resfile = out_dir.join("result");
+        cmd_lib::spawn!(nix  build "$refstr" --out-link "$resfile")
+            .unwrap()
+            .wait()
+            .unwrap();
+        Ok(())
     }
 }
-
-// impl Display for FlakeRef {
-//     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-//         write!(f, "{}#{}", self.source.as_ref(), self.output_selector)
-//     }
-// }
 
 impl FlakeRefInput {
     /// nixos-rsbuild will flakebuild, unless explicitly stated with the --no-flake flag
@@ -222,7 +214,7 @@ mod tests {
             }),
         };
 
-        let cmd = data.build_cmd(None).unwrap();
+        let cmd = data.run_nix_build(None).unwrap();
         assert_eq!(
             format!("{:?}", cmd),
             r#""nix" "build" "/fizz/buzz#fizz" "--out-link" "./result""#
@@ -230,7 +222,7 @@ mod tests {
         let tmp = tempfile::tempdir_in(".").unwrap();
         let tmp = tmp.path();
         let cmd = data
-            .build_cmd(Some(Utf8Path::from_path(tmp).unwrap()))
+            .run_nix_build(Some(Utf8Path::from_path(tmp).unwrap()))
             .unwrap();
         assert_eq!(
             format!("{:?}", cmd),

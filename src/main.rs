@@ -21,7 +21,7 @@
 use std::{
     collections::BTreeMap,
     error::Error,
-    io::{self, Write},
+    io::{self, BufRead, BufReader, Write},
     path::{Path, PathBuf},
     process::{Command as CliCommand, Output, Stdio},
     string::ToString,
@@ -48,40 +48,44 @@ fn main() -> Result<(), Box<dyn Error>> {
     }
 
     // plain flake build
-    if let SubCommand::Builders {
-        task: comm,
-        arg,
-    } = cli
-    {
+    if let SubCommand::Builders { task, arg } = cli {
         log::trace!("getting full flake");
         let use_td = arg.res_dir.is_none();
         let full_flake = arg.flake.init_flake_ref()?;
-        let path = arg.res_dir.unwrap_or(
+        let res_dir = arg.res_dir.unwrap_or(
             Utf8PathBuf::from_path_buf(TempDir::new("nixrsbuild-")?.into_path()).unwrap(),
         );
 
-        let mut build_command = full_flake.build_cmd(path.as_path())?;
-        log::trace!("bcom: {:?}", build_command);
-        let comm_output = build_command.output()?;
-        log::trace!("com: {:?}", comm_output);
-        let out_link = path.join("result/bin/switch-to-configuration");
+        full_flake.run_nix_build(res_dir.as_path())?;
 
-        let local_arch = std::env::var_os("LOCALE_ARCHIVE").unwrap_or_default();
-        let task_str = comm.to_string();
-        cmd_lib::run_cmd!(
-            sudo bash -c "env -i LOCALE_ARCHIVE=$local_arch $out_link $task_str";
-        )?;
+        match task {
+            BuildSubComms::Switch
+            | BuildSubComms::Boot
+            | BuildSubComms::Test
+            | BuildSubComms::DryActivate => {
+                let switch_bin = res_dir.join("result/bin/switch-to-configuration");
+                let out_link = std::fs::canonicalize(switch_bin).unwrap();
+
+                let local_arch = std::env::var_os("LOCALE_ARCHIVE").unwrap_or_default();
+                let task_str = task.to_string();
+                cmd_lib::spawn!(
+                    sudo nu -c "env -i LOCALE_ARCHIVE=$local_arch $out_link $task_str"
+                )?
+                .wait();
+            }
+            _ => {}
+        }
 
         if use_td {
             let sys_td = std::env::temp_dir();
             assert!(std::fs::exists(&sys_td).unwrap());
-            assert!(path.starts_with(sys_td));
+            assert!(res_dir.starts_with(sys_td));
             assert!(
-                path.file_name().unwrap().starts_with("nixrsbuild-"),
+                res_dir.file_name().unwrap().starts_with("nixrsbuild-"),
                 "{}",
-                path.file_name().unwrap()
+                res_dir.file_name().unwrap()
             );
-            std::fs::remove_dir_all(path);
+            std::fs::remove_dir_all(res_dir);
         }
 
         return Ok(());
