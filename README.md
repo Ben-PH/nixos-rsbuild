@@ -21,8 +21,8 @@
 
 - `cargo run -- -h` show top level help
 - `cargo run -- --help` show top level help in long-form
-- `cargo run -- <subcommand> -h` show subcommand help
-- `cargo run -- <subcommand> --help` show subcommand help in long-form
+- `cargo run -- <builders | utils> -h` show information on the two classes of tasks
+- `cargo run -- <subcommand> <task> --help` show task help in long-form
  
 #### For the "Rust Curious/Skeptic"
 
@@ -35,11 +35,11 @@ NOTE: `<flakeref>` => `/path/to/dir#flake.attr`
 1. [x] `nixos-rsbuild list-generations [--json]`
 1. [x] `nixos-rsbuild build`
 1. [x] `nixos-rsbuild build --flake /path/to#machine_name`
-2. [ ] `nixos-rebuild boot --flake <flakeref>` -> `nixos-rs boot <flakeref>`
-3. [ ] `nixos-rebuild boot` -> `nixos-rsbuild boot --config`
-4. [ ] `nixos-rebuild test ...` -> `nixos-rsbuild test ...`
-5. [ ] `nixos-rebuild switch ...` -> `nixos-rsbuild switch ...`
-6. [ ] `nixos-rebuild switch | boot | test ... --use-remote-sudo` -> `nixos-rsbuild <switch | boot | test> -s ...`
+2. [x] `nixos-rebuild boot --flake <flakeref>` -> `nixos-rs boot <flakeref>`
+3. [x] `nixos-rebuild boot` -> `nixos-rsbuild boot --config`
+4. [x] `nixos-rebuild test ...` -> `nixos-rsbuild test ...`
+5. [x] `nixos-rebuild switch ...` -> `nixos-rsbuild switch ...`
+6. [x] `nixos-rebuild switch | boot | test ... --use-remote-sudo` -> `nixos-rsbuild <switch | boot | test> -s ...`
 
 #### TODOs
 
