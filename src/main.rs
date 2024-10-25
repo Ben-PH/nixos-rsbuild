@@ -78,6 +78,18 @@ fn main() -> Result<(), Box<dyn Error>> {
             sudo bash -c "env -i LOCALE_ARCHIVE=$local_arch $out_link $task_str";
         )?;
 
+        if use_td {
+            let sys_td = std::env::temp_dir();
+            assert!(std::fs::exists(&sys_td).unwrap());
+            assert!(path.starts_with(sys_td));
+            assert!(
+                path.file_name().unwrap().starts_with("nixrsbuild-"),
+                "{}",
+                path.file_name().unwrap()
+            );
+            std::fs::remove_dir_all(path);
+        }
+
         return Ok(());
     }
 
