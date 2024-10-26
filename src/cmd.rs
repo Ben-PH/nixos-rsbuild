@@ -5,10 +5,10 @@ use clap::{Args, Parser, Subcommand};
 
 use crate::flake::FlakeRefInput;
 
-mod parsers;
-mod stashed;
 /// Implementations for carrying out the various tasks
 mod handlers;
+mod parsers;
+mod stashed;
 
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
@@ -51,16 +51,15 @@ pub enum BuildSubComms {
     DryActivate,
     /// No-op, but shows the build/download ops performed by an actual build
     DryBuild,
-    /// Un-tested. Use at own risk. 
+    /// Un-tested. Use at own risk.
     BuildVm,
-    /// Un-tested. Use at own risk. 
+    /// Un-tested. Use at own risk.
     BuildVmWithBootloader,
 }
 
 /// Tools-oriented tasks. See its `-h`/`--help` for more info.
 #[derive(Subcommand, Debug)]
 pub enum UtilSubCommand {
-
     /// Output available generations.
     ListGenerations {
         #[clap(long)]
@@ -89,7 +88,7 @@ pub struct AllArgs {
     // /// upgrade root-users "nixos" channel, and channels containing `.update-on-nixos-rebuild`
     // /// marker file in base-dir
     // pub upgrade: bool,
-    
+
     // #[clap(long)]
     // #[arg(conflicts_with("upgrade"))]
     // /// Unimplemented
@@ -108,8 +107,6 @@ pub struct AllArgs {
     // /// This is required when ``NixOS`` modules use features not provided by the currently installed
     // /// version of Nix.
     // pub no_build_nix: bool,
-
-    
     #[clap(long, conflicts_with_all(["file"]))] //, "attr", "no_flake"]))]
     #[arg(value_parser = parsers::flake_parse, default_value_t = FlakeRefInput::try_default().unwrap())]
     #[arg(name = "FLAK_REF")]
@@ -122,7 +119,6 @@ pub struct AllArgs {
     // #[clap(long)]
     // /// Used to select an attrubite other than the default
     // pub attr: Option<String>,
-
     #[clap(long)]
     /// For this build, sets the input file.
     pub res_dir: Option<Utf8PathBuf>,
@@ -130,12 +126,10 @@ pub struct AllArgs {
     // #[clap(long, short = 's')]
     // when `--target-host` or `--build-host`, make this one availabel
     // use_substitutes: bool,
-
     #[clap(long)]
     #[arg(value_parser = nix_file_exists)]
     /// For this build, sets the input file.
     pub file: Option<Utf8PathBuf>,
-
     // #[clap(long = "profile_name")]
     // #[arg(default_value_t = Utf8PathBuf::from(String::from("/nix/var/nix/profiles/system")), value_parser = parsers::profile_name_parse)]
     // /// For this build, sets profile directory to `/nix/var/nix/profiles/system-profiles/$profile-name`

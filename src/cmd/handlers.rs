@@ -5,7 +5,6 @@ use tempdir::TempDir;
 
 use super::AllArgs;
 
-
 impl super::BuildSubComms {
     /// Builds a config, capturing a sym-link. Follows up with a call to `switch-to-configuration`
     /// as appropriate.
@@ -17,10 +16,7 @@ impl super::BuildSubComms {
         // This is where the switch/boot/test/dry-activate component gets carried out
         if matches!(
             self,
-            Self::Switch
-                | Self::Boot
-                | Self::Test
-                | Self::DryActivate
+            Self::Switch | Self::Boot | Self::Test | Self::DryActivate
         ) {
             let switch_bin = res_dir.join("result/bin/switch-to-configuration");
             let out_link = std::fs::canonicalize(switch_bin).unwrap();
@@ -65,4 +61,3 @@ impl super::BuildSubComms {
             .map(|_| (res_dir, use_td))
     }
 }
-
