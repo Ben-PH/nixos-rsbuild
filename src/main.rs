@@ -1,4 +1,4 @@
-//! As per description, is a reimpl of nixos-rebuild with room for opinionation.
+//! As per description, is a reimplementation of nixos-rebuild with room for opinionatedness.
 //!
 //! If you are at a "Rust Curious" level, and find this code base esoteric, please raise an issue on
 //! github. We aren't here to gate-keep, or make the learning curve of Rust any steeper than it
@@ -10,8 +10,8 @@
 //!    mappings, chainings, etc. Read the comments, take your time.
 //!  - Use LSP for code navigation. goto definition, reference, type definition etc.
 //!  - Think in terms of types. The business logic is intended, as much as possible, to be
-//!    encapsulated at the type-level. lines-of-code is lower level impl detail.
-//!  - glhf
+//!    encapsulated at the type-level. lines-of-code are a lower level implementation detail.
+//!  - Good luck and have fun!
 
 #![warn(clippy::pedantic)]
 #![allow(clippy::uninlined_format_args)]
@@ -27,15 +27,18 @@ use std::{
     string::ToString,
 };
 
-use camino::{Utf8Path, Utf8PathBuf};
-use clap::Parser;
-use cmd::{AllArgs, Cli, SubCommand};
+// External dependencies:
+use camino::{Utf8Path, Utf8PathBuf};  // UFT8 Paths
+use clap::Parser;  // Command-Line Interface Framework
+use cmd::{AllArgs, Cli, SubCommand};  // Running shell commands
+use tempdir::TempDir;  // Nomen est omen
+
+// Internal dependencies
 use list_generations::GenerationMeta;
 use nixos_rsbuild::{
     cmd::{self, BuildSubComms, UtilSubCommand},
     list_generations,
 };
-use tempdir::TempDir;
 
 fn main() -> Result<(), Box<dyn Error>> {
     let cli = initial_init()?;
@@ -55,17 +58,17 @@ fn main() -> Result<(), Box<dyn Error>> {
     }
 }
 
-/// Sanatises arg[0]
+/// Sanitises arg[0]
 /// Ensures not run as root
 /// Initialises logger
-/// Parses cli, returning the subcommand of the result
+/// Parses CLI, returning the subcommand of the result
 fn initial_init() -> Result<SubCommand, Box<dyn Error>> {
     if nix::unistd::Uid::current().is_root() {
         // TODO: this pre-empts automation. something to think about
         return Err("This program should not be run as root!".into());
     };
 
-    // sanatise executable name
+    // sanitise executable name
     let args = std::env::args();
     let mut args = args.peekable();
     let Some(fst) = args.peek() else {
@@ -90,7 +93,7 @@ fn initial_init() -> Result<SubCommand, Box<dyn Error>> {
         .filter_level(log::LevelFilter::Trace)
         .init();
 
-    // parse out cli args into a structured encapsulation
+    // parse out CLI-arguments into a structured encapsulation
     let cli = {
         let cli = Cli::parse_from(args);
         log::trace!("parsed cli: {:?}", cli);
