@@ -10,6 +10,8 @@ mod attribute;
 mod flake_path;
 pub use attribute::FlakeAttr;
 
+use crate::cmd::BuildSubComms;
+
 /// Destructured `<flake_dir>[#attribute]`
 #[derive(Debug, Clone)]
 pub struct FlakeRefInput {
@@ -81,7 +83,7 @@ impl FlakeRefInput {
     /// - No `/etc/nixos/flake.nix` present
     ///
     /// TODO: Error-out if derived hostname is not present in `nixosConfigurations`
-    pub fn init_flake_ref(&self) -> io::Result<FlakeRef> {
+    pub fn init_flake_ref(&self, task: &BuildSubComms) -> io::Result<FlakeRef> {
         let path = FlakeDir::try_from_path(&self.source)?;
 
         let mut attr = self
@@ -90,7 +92,22 @@ impl FlakeRefInput {
             .unwrap_or(FlakeAttr::try_default()?);
 
         attr.set_config()?;
-        attr.route_to_toplevel();
+        attr.attr_path.extend_from_slice(&[
+            "config".to_string(),
+            "system".to_string(),
+            "build".to_string(),
+        ]);
+        let last_attr = match task {
+            BuildSubComms::Switch
+            | BuildSubComms::Boot
+            | BuildSubComms::Test
+            | BuildSubComms::DryBuild
+            | BuildSubComms::Build
+            | BuildSubComms::DryActivate => "toplevel",
+            BuildSubComms::BuildVm => "vm",
+            BuildSubComms::BuildVmWithBootloader => "vmWithBootLoader",
+        };
+        attr.attr_path.push(last_attr.to_string());
 
         Ok(FlakeRef {
             source: path,

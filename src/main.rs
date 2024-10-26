@@ -51,7 +51,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     if let SubCommand::Builders { task, arg } = cli {
         log::trace!("getting full flake");
         let use_td = arg.res_dir.is_none();
-        let full_flake = arg.flake.init_flake_ref()?;
+        let full_flake = arg.flake.init_flake_ref(&task)?;
         let res_dir = arg.res_dir.unwrap_or(
             Utf8PathBuf::from_path_buf(TempDir::new("nixrsbuild-")?.into_path()).unwrap(),
         );
@@ -73,7 +73,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                 )?
                 .wait();
             }
-            _ => {}
+            _ => unimplemented!("Builders task not yet implemented: {}", task),
         }
 
         if use_td {
@@ -91,6 +91,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         return Ok(());
     }
 
+    unimplemented!("Not yet implemented: {:?}", cli);
     // TODO: wrap and impl drop. The referenced impl does an ssh drop
     let tmpdir = tempfile::TempDir::with_prefix("nixos-rsbuild")?;
     log::trace!("using tmpdir: {}", tmpdir.path().display());
