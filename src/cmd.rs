@@ -1,63 +1,24 @@
 use std::io::{self, ErrorKind};
 
-use camino::{Utf8Path, Utf8PathBuf};
+use camino::Utf8PathBuf;
 use clap::{Args, Parser, Subcommand};
 
 use crate::flake::FlakeRefInput;
 
+/// Implementations for carrying out the various tasks
+mod handlers;
+mod parsers;
+mod stashed;
+
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
+/// Entry point into the cli application.
 pub struct Cli {
     #[command(subcommand)]
     pub command: SubCommand,
 }
 
-/// Commands that involve building: switch, test, boot, etc..
-#[derive(Subcommand, Debug, strum::Display)]
-#[strum(serialize_all = "kebab-case")]
-pub enum BuildSubComms {
-    /// Build a config: Activate it, add it to boot-menu as default.
-    Switch,
-    /// Build a config, add it to boot-menu as default. Will not be activated.
-    Boot,
-    /// Build and activate a config. Will not be added to boot-menu
-    Test,
-    /// Build and sym-link only: No activation, or boot menu changes. Symlinks to configuration through `./result`.
-    ///
-    /// This is additional long-help
-    /// This should not be shown under `-h`
-    /// Only to be shown with `--help`
-    /// the short help will also be shown under `--help`
-    Build,
-    /// Build config only. Show (possibly incomplete) list of changes that its activation
-    DryActivate,
-    /// No-op, but shows the build/download ops performed by an actual build
-    DryBuild,
-    BuildVm,
-    BuildVmWithBootloader,
-}
-
-/// Commands such as `repl`, `list-generations`, etc
-#[derive(Subcommand, Debug)]
-pub enum UtilSubCommand {
-    ListGenerations {
-        #[clap(long)]
-        /// Outputs generations in json format
-        json: bool,
-    },
-    /// Opens `configuration.nix` in default editor.
-    Edit {
-        #[clap(flatten)]
-        all: AllArgs,
-    },
-    /// Opens the configuration using `nix repl`
-    Repl {
-        #[clap(flatten)]
-        all: AllArgs,
-    },
-}
-
-// TODO: split build and non-build commands
+/// Foobarbaz
 #[derive(Subcommand, Debug)]
 pub enum SubCommand {
     Builders {
@@ -72,113 +33,120 @@ pub enum SubCommand {
     },
 }
 
-#[derive(Args, Debug)]
-pub struct RbFlag {
-    #[clap(long)]
-    rollback: bool,
+/// Build-oriented tasks. See its `-h`/`--help` for more info.
+#[derive(Subcommand, Debug, strum::Display)]
+#[strum(serialize_all = "kebab-case")]
+pub enum BuildSubComms {
+    /// Build and... Activate. Start using it, but won't be part of next reboot.
+    Test,
+    /// Build and... BootMenu. Will be default config on next reboot.
+    Boot,
+    /// Build and... Activate + BootMenu. Analagous to `test + boot` runs
+    Switch,
+    /// Build and... Nothing. Makes sym-link to nix-store entry: `./result` by default
+    ///
+    /// Use `--res-dir` to override default directory in which the `result` symlink will be placed
+    Build,
+    /// Build config only. Show (possibly incomplete) list of changes that its activation
+    DryActivate,
+    /// No-op, but shows the build/download ops performed by an actual build
+    DryBuild,
+    /// Un-tested. Use at own risk.
+    BuildVm,
+    /// Un-tested. Use at own risk.
+    BuildVmWithBootloader,
 }
-#[derive(Args, Debug)]
-struct SpecArg {
-    specialisation: Option<String>,
+
+/// Tools-oriented tasks. See its `-h`/`--help` for more info.
+#[derive(Subcommand, Debug)]
+pub enum UtilSubCommand {
+    /// Output available generations.
+    ListGenerations {
+        #[clap(long)]
+        /// Outputs generations in json format
+        json: bool,
+    },
+    // /// Opens `configuration.nix` in default editor.
+    // Edit {
+    //     #[clap(flatten)]
+    //     all: AllArgs,
+    // },
+
+    // /// Opens the configuration using `nix repl`
+    // Repl {
+    //     #[clap(flatten)]
+    //     all: AllArgs,
+    // },
 }
+
 #[derive(Args, Debug)]
 #[allow(clippy::struct_excessive_bools)]
 pub struct AllArgs {
-    /// upgrade root-users "nixos" channel, and channels containing `.update-on-nixos-rebuild`
-    /// marker file in base-dir
-    #[clap(long)]
-    pub upgrade: bool,
-    /// --upgrade, but ALL of root-users channels
-    #[clap(long)]
-    #[arg(conflicts_with("upgrade"))]
-    pub upgrade_all: bool,
-    /// (Re)Installs boot loader to device specified by relevant config options.
-    #[clap(long)]
-    pub install_bootloader: bool,
-    /// Uses currently installed version of Nix.
-    ///
-    /// Normal behavior is to first build the `nixUnstable` attribute in `Nix-pkgs`, and use that.
-    /// This is required when ``NixOS`` modules use features not provided by the currently installed
-    /// version of Nix.
-    #[clap(long, short)]
-    pub no_build_nix: bool,
+    // #[clap(long)]
+    // /// Unimplemented
+    // ///
+    // /// upgrade root-users "nixos" channel, and channels containing `.update-on-nixos-rebuild`
+    // /// marker file in base-dir
+    // pub upgrade: bool,
 
-    /// TODO: if both flake and no-flake are unset, set flake to /etc/nixos/flake.nix, but only if
-    /// that file exists...
-    #[clap(long, conflicts_with_all(["file", "attr", "no_flake"]))]
-    #[arg(value_parser = flake_parse, default_value_t = FlakeRefInput::try_default().unwrap())]
+    // #[clap(long)]
+    // #[arg(conflicts_with("upgrade"))]
+    // /// Unimplemented
+    // ///
+    // /// --upgrade, but ALL of root-users channels
+    // pub upgrade_all: bool,
+
+    // #[clap(long)]
+    // /// (Re)Installs boot loader to device specified by relevant config options.
+    // pub install_bootloader: bool,
+
+    // #[clap(long, short)]
+    // /// Uses currently installed version of Nix.
+    // ///
+    // /// Normal behavior is to first build the `nixUnstable` attribute in `Nix-pkgs`, and use that.
+    // /// This is required when ``NixOS`` modules use features not provided by the currently installed
+    // /// version of Nix.
+    // pub no_build_nix: bool,
+    #[clap(long, conflicts_with_all(["file"]))] //, "attr", "no_flake"]))]
+    #[arg(value_parser = parsers::flake_parse, default_value_t = FlakeRefInput::try_default().unwrap())]
+    #[arg(name = "FLAK_REF")]
+    /// Explicitly define the flake path: Typically `.#<hostname>`
     pub flake: FlakeRefInput,
-    #[clap(long)]
-    pub no_flake: bool,
 
-    /// Used to select an attrubite other than the default
-    #[clap(long)]
-    pub attr: Option<String>,
+    // #[clap(long)]
+    // pub no_flake: bool,
+
+    // #[clap(long)]
+    // /// Used to select an attrubite other than the default
+    // pub attr: Option<String>,
     #[clap(long)]
     /// For this build, sets the input file.
     pub res_dir: Option<Utf8PathBuf>,
-    // whet `--target-host` or `--build-host`, make this one availabel
+
     // #[clap(long, short = 's')]
+    // when `--target-host` or `--build-host`, make this one availabel
     // use_substitutes: bool,
-    // todo: parse as valid nix file
     #[clap(long)]
-    #[arg(value_parser = file_exists)]
+    #[arg(value_parser = nix_file_exists)]
     /// For this build, sets the input file.
     pub file: Option<Utf8PathBuf>,
-    #[clap(long = "profile_name")]
-    #[arg(default_value_t = Utf8PathBuf::from(String::from("/nix/var/nix/profiles/system")), value_parser = profile_name_parse)]
-    //Utf8PathBuf::from_path_buf(PathBuf::from("/nix/var/nix/profiles/system")).unwrap())]
-    /// For this build, sets profile directory to `/nix/var/nix/profiles/system-profiles/$profile-name`
-    pub profile_path: Utf8PathBuf,
-    #[clap(long)]
+    // #[clap(long = "profile_name")]
+    // #[arg(default_value_t = Utf8PathBuf::from(String::from("/nix/var/nix/profiles/system")), value_parser = parsers::profile_name_parse)]
+    // /// For this build, sets profile directory to `/nix/var/nix/profiles/system-profiles/$profile-name`
+    // pub profile_path: Utf8PathBuf,
+
+    // #[clap(long)]
     // #[arg(conflicts_with_all(["no_build_nix", "flake", "no_flake", "attr", "file"]))]
     // pub rollback: bool,
-    #[clap(long)]
-    pub build_host: bool,
-    #[clap(long)]
-    pub fast: bool,
+
+    // #[clap(long)]
+    // pub build_host: bool,
+
+    // #[clap(long)]
+    // pub fast: bool,
 }
 
-// TODO: this is needed for bringing in a value parser. if you can access `try_from` directly, do
-// that instead
-fn flake_parse(val: &str) -> Result<FlakeRefInput, String> {
-    FlakeRefInput::try_from(val)
-}
-
-#[derive(Args, Debug)]
-#[allow(clippy::struct_excessive_bools)]
-struct FlakeBuildArgs {
-    #[clap(long)]
-    recreate_lock_file: bool,
-    #[clap(long)]
-    no_update_lock_file: bool,
-    #[clap(long)]
-    no_write_lock_file: bool,
-    #[clap(long)]
-    no_registries: bool,
-    #[clap(long)]
-    commit_lock_file: bool,
-    #[clap(long)]
-    update_input: Option<String>,
-    #[clap(long)]
-    #[arg(num_args(2))]
-    override_input: Option<String>,
-    #[clap(long)]
-    impure: bool,
-}
-
-impl AllArgs {
-    pub fn building_attribute(&self) -> bool {
-        self.file.is_some() || self.attr.is_some()
-    }
-}
-
-#[allow(clippy::unnecessary_wraps, reason = "result needed for parser")]
-fn profile_name_parse(prof_name: &str) -> Result<Utf8PathBuf, String> {
-    Ok(Utf8Path::new("/nix/var/nix/profiles/system-profiles").join(prof_name))
-}
-
-fn file_exists(path: &str) -> io::Result<Utf8PathBuf> {
+fn nix_file_exists(path: &str) -> io::Result<Utf8PathBuf> {
     let path = Utf8PathBuf::from(path);
     if !path.exists() {
         return Err(io::Error::new(
@@ -199,25 +167,4 @@ fn file_exists(path: &str) -> io::Result<Utf8PathBuf> {
         ));
     }
     Ok(path)
-}
-
-impl SubCommand {
-    /// all but list-gens contains `AllArgs`.
-    /// If this is already known not to be a ``ListGenerations`` run, you can unwrap this no problem.
-    /// ...And that should be a flag to clean up the arg architecture, no?
-    pub fn inner_args(&self) -> Option<&AllArgs> {
-        match self {
-            SubCommand::Builders { arg, .. } => Some(arg),
-            _ => None,
-        }
-    }
-    pub fn building_attr(&self) -> bool {
-        self.inner_args().is_some_and(AllArgs::building_attribute)
-    }
-    // pub fn can_run(&self) -> bool {
-    //     matches!(
-    //         self,
-    //         Self::Switch { .. } | Self::Boot { .. } | Self::Test { .. }
-    //     )
-    // }
 }
