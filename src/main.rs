@@ -32,7 +32,7 @@ use clap::Parser;
 use cmd::{AllArgs, Cli, SubCommand};
 use list_generations::GenerationMeta;
 use nixos_rsbuild::{
-    cmd::{self, BuildSubComms},
+    cmd::{self, BuildSubComms, UtilSubCommand},
     list_generations,
 };
 use tempdir::TempDir;
@@ -40,72 +40,17 @@ use tempdir::TempDir;
 fn main() -> Result<(), Box<dyn Error>> {
     let cli = initial_init()?;
 
-    // list generations
-    if let Some(gen_meta) = GenerationMeta::dispatch_cmd(&cli) {
-        let gens_iter = gen_meta?;
-        println!("{:#?}", gens_iter.collect::<BTreeMap<_, _>>());
-        return Ok(());
-    }
-
-    // plain flake build
-    if let SubCommand::Builders { task, arg } = cli {
-        log::trace!("Constructing configuration");
-        let use_td = arg.res_dir.is_none();
-        let full_flake = arg.flake.init_flake_ref(&task)?;
-        let res_dir = arg.res_dir.unwrap_or(
-            Utf8PathBuf::from_path_buf(TempDir::new("nixrsbuild-")?.into_path()).unwrap(),
-        );
-        log::trace!("Result link directory: {}", res_dir);
-
-        full_flake.run_nix_build(res_dir.as_path())?;
-        if matches!(
-            task,
-            BuildSubComms::Switch
-                | BuildSubComms::Boot
-                | BuildSubComms::Test
-                | BuildSubComms::DryActivate
-        ) {
-            let switch_bin = res_dir.join("result/bin/switch-to-configuration");
-            let out_link = std::fs::canonicalize(switch_bin).unwrap();
-
-            let local_arch = std::env::var_os("LOCALE_ARCHIVE").unwrap_or_default();
-            let task_str = task.to_string();
-            cmd_lib::spawn!(
-                sudo nu -c "env -i LOCALE_ARCHIVE=$local_arch $out_link $task_str"
-            )?
-            .wait();
+    match cli {
+        SubCommand::Util {
+            task: UtilSubCommand::ListGenerations { json },
+        } => {
+            let gens_iter = GenerationMeta::run_cmd()?;
+            println!("{:#?}", gens_iter.collect::<BTreeMap<_, _>>());
+            Ok(())
         }
-
-        if use_td {
-            let sys_td = std::env::temp_dir();
-            assert!(std::fs::exists(&sys_td).unwrap());
-            assert!(res_dir.starts_with(sys_td));
-            assert!(
-                res_dir.file_name().unwrap().starts_with("nixrsbuild-"),
-                "{}",
-                res_dir.file_name().unwrap()
-            );
-            std::fs::remove_dir_all(res_dir);
-        }
-
-        return Ok(());
+        SubCommand::Builders { task, arg } => Ok(task.run_build(arg)?),
+        SubCommand::Util { task } => unimplemented!("todo: implement {:?}", task),
     }
-
-    unimplemented!("Not yet implemented: {:?}", cli);
-    // TODO: wrap and impl drop. The referenced impl does an ssh drop
-    let tmpdir = tempfile::TempDir::with_prefix("nixos-rsbuild")?;
-    log::trace!("using tmpdir: {}", tmpdir.path().display());
-
-    // TODO: check for re-exec
-    // let reexec_env = std::env::var("_NIXOS_REBUILD_REEXEC").unwrap_or_default();
-    // if reexec_env.is_empty()
-    //     && cli.can_run()
-    //     && matches!(cli.inner_args(), Some(AllArgs { fast: false, .. }))
-    // {
-    //     todo!("handle the reexec context")
-    // }
-
-    Ok(())
 }
 
 /// Sanatises arg[0]
@@ -151,12 +96,4 @@ fn initial_init() -> Result<SubCommand, Box<dyn Error>> {
         cli
     };
     Ok(cli.command)
-}
-
-/// Simple wrapper to trace-log commands that get run, and the renults
-fn run_cmd(cmd: &mut CliCommand) -> io::Result<Output> {
-    log::trace!("RUN: {:?}", cmd);
-    let res = cmd.spawn().expect("failed to start").wait_with_output();
-    log::trace!("RES: {:?}", res);
-    res
 }

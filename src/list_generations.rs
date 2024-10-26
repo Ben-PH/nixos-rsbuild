@@ -9,8 +9,6 @@ use std::{
     process::Command,
 };
 
-use crate::cmd::{SubCommand, UtilSubCommand};
-
 const GEN_DIR: &str = "/nix/var/nix/profiles";
 
 #[derive(Debug, Serialize, Eq, PartialEq, Copy, Clone)]
@@ -170,22 +168,7 @@ impl TryFrom<&Path> for GenerationMeta {
 impl GenerationMeta {
     /// An iterator over (number, generation-meta) pairs. Usually `.collect::<_>()`ed into an
     /// ordered key/value data struct such as a `BTreeMap`.
-    pub fn dispatch_cmd(
-        cmd: &SubCommand,
-    ) -> Option<io::Result<impl Iterator<Item = (GenNumber, Self)>>> {
-        if matches!(
-            cmd,
-            SubCommand::Util {
-                task: UtilSubCommand::ListGenerations { .. }
-            }
-        ) {
-            Some(Self::run_cmd())
-        } else {
-            None
-        }
-    }
-
-    fn run_cmd() -> io::Result<impl Iterator<Item = (GenNumber, Self)>> {
+    pub fn run_cmd() -> io::Result<impl Iterator<Item = (GenNumber, Self)>> {
         let gen_dir_root = Path::new(GEN_DIR);
 
         // iterate over each entry in the directory...

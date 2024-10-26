@@ -2,6 +2,7 @@ use std::io::{self, ErrorKind};
 
 use camino::Utf8PathBuf;
 use clap::{Args, Parser, Subcommand};
+use tempdir::TempDir;
 
 use crate::flake::FlakeRefInput;
 
@@ -53,6 +54,53 @@ pub enum BuildSubComms {
     DryBuild,
     BuildVm,
     BuildVmWithBootloader,
+}
+
+impl BuildSubComms {
+    /// Builds a config, capturing a sym-link. Follows up with a call to `switch-to-configuration`
+    /// as appropriate.
+    pub fn run_build(&self, args: AllArgs) -> io::Result<()> {
+        log::trace!("Constructing configuration");
+        let use_td = args.res_dir.is_none();
+        let full_flake = args.flake.init_flake_ref(self)?;
+        let res_dir = args.res_dir.unwrap_or(
+            Utf8PathBuf::from_path_buf(TempDir::new("nixrsbuild-")?.into_path()).unwrap(),
+        );
+        log::trace!("Result link directory: {}", res_dir);
+
+        full_flake.run_nix_build(res_dir.as_path())?;
+        if matches!(
+            self,
+            BuildSubComms::Switch
+                | BuildSubComms::Boot
+                | BuildSubComms::Test
+                | BuildSubComms::DryActivate
+        ) {
+            let switch_bin = res_dir.join("result/bin/switch-to-configuration");
+            let out_link = std::fs::canonicalize(switch_bin).unwrap();
+
+            let local_arch = std::env::var_os("LOCALE_ARCHIVE").unwrap_or_default();
+            let task_str = self.to_string();
+            let _ = cmd_lib::spawn!(
+                sudo nu -c "env -i LOCALE_ARCHIVE=$local_arch $out_link $task_str"
+            )?
+            .wait();
+        }
+
+        if use_td {
+            let sys_td = std::env::temp_dir();
+            assert!(std::fs::exists(&sys_td).unwrap());
+            assert!(res_dir.starts_with(sys_td));
+            assert!(
+                res_dir.file_name().unwrap().starts_with("nixrsbuild-"),
+                "{}",
+                res_dir.file_name().unwrap()
+            );
+            let _ = std::fs::remove_dir_all(res_dir);
+        }
+
+        Ok(())
+    }
 }
 
 /// Commands such as `repl`, `list-generations`, etc
