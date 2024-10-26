@@ -12,11 +12,13 @@ mod handlers;
 
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
+/// Entry point into the cli application.
 pub struct Cli {
     #[command(subcommand)]
     pub command: SubCommand,
 }
 
+/// Foobarbaz
 #[derive(Subcommand, Debug)]
 pub enum SubCommand {
     Builders {
@@ -35,12 +37,12 @@ pub enum SubCommand {
 #[derive(Subcommand, Debug, strum::Display)]
 #[strum(serialize_all = "kebab-case")]
 pub enum BuildSubComms {
-    /// Build and... Activate it, add it to boot-menu as default.
-    Switch,
-    /// Build and... Add it to boot-menu as default. Will not be activated.
-    Boot,
-    /// Build and... Activate a config. Will not be added to boot-menu
+    /// Build and... Activate. Start using it, but won't be part of next reboot.
     Test,
+    /// Build and... BootMenu. Will be default config on next reboot.
+    Boot,
+    /// Build and... Activate + BootMenu. Analagous to `test + boot` runs
+    Switch,
     /// Build and... Nothing. Makes sym-link to nix-store entry: `./result` by default
     ///
     /// Use `--res-dir` to override default directory in which the `result` symlink will be placed
@@ -50,35 +52,32 @@ pub enum BuildSubComms {
     /// No-op, but shows the build/download ops performed by an actual build
     DryBuild,
     /// Un-tested. Use at own risk. 
-    ///
-    /// See `nixos-rebuild --help` for what it would do if implemented
-    /// correctly
     BuildVm,
     /// Un-tested. Use at own risk. 
-    ///
-    /// See `nixos-rebuild --help` for what it would do if implemented
-    /// correctly
     BuildVmWithBootloader,
 }
 
 /// Tools-oriented tasks. See its `-h`/`--help` for more info.
 #[derive(Subcommand, Debug)]
 pub enum UtilSubCommand {
+
+    /// Output available generations.
     ListGenerations {
         #[clap(long)]
         /// Outputs generations in json format
         json: bool,
     },
-    /// Opens `configuration.nix` in default editor.
-    Edit {
-        #[clap(flatten)]
-        all: AllArgs,
-    },
-    /// Opens the configuration using `nix repl`
-    Repl {
-        #[clap(flatten)]
-        all: AllArgs,
-    },
+    // /// Opens `configuration.nix` in default editor.
+    // Edit {
+    //     #[clap(flatten)]
+    //     all: AllArgs,
+    // },
+
+    // /// Opens the configuration using `nix repl`
+    // Repl {
+    //     #[clap(flatten)]
+    //     all: AllArgs,
+    // },
 }
 
 #[derive(Args, Debug)]
@@ -111,8 +110,10 @@ pub struct AllArgs {
     // pub no_build_nix: bool,
 
     
-    #[clap(long, conflicts_with_all(["file", "attr", "no_flake"]))]
+    #[clap(long, conflicts_with_all(["file"]))] //, "attr", "no_flake"]))]
     #[arg(value_parser = parsers::flake_parse, default_value_t = FlakeRefInput::try_default().unwrap())]
+    #[arg(name = "FLAK_REF")]
+    /// Explicitly define the flake path: Typically `.#<hostname>`
     pub flake: FlakeRefInput,
 
     // #[clap(long)]
@@ -122,7 +123,7 @@ pub struct AllArgs {
     // /// Used to select an attrubite other than the default
     // pub attr: Option<String>,
 
-    // #[clap(long)]
+    #[clap(long)]
     /// For this build, sets the input file.
     pub res_dir: Option<Utf8PathBuf>,
 
