@@ -60,15 +60,11 @@ impl BuildSubComms {
     /// Builds a config, capturing a sym-link. Follows up with a call to `switch-to-configuration`
     /// as appropriate.
     pub fn run_build(&self, args: AllArgs) -> io::Result<()> {
-        log::trace!("Constructing configuration");
-        let use_td = args.res_dir.is_none();
-        let full_flake = args.flake.init_flake_ref(self)?;
-        let res_dir = args.res_dir.unwrap_or(
-            Utf8PathBuf::from_path_buf(TempDir::new("nixrsbuild-")?.into_path()).unwrap(),
-        );
-        log::trace!("Result link directory: {}", res_dir);
+        log::trace!("Constructing configuration: {:?}", args);
+        let (res_dir, use_td) = self.build_configuration(args)?;
 
-        full_flake.run_nix_build(res_dir.as_path())?;
+        // Execute switch-to-configuration provided by the configuration build.
+        // This is where the switch/boot/test/dry-activate component gets carried out
         if matches!(
             self,
             BuildSubComms::Switch
@@ -87,7 +83,10 @@ impl BuildSubComms {
             .wait();
         }
 
+        // Sanity-check that we are actually cleaning up a tempdir, and not nuking something that
+        // shouldn't be. This could justifyably be removed, as the OS GCs the tempdir anyway.
         if use_td {
+            log::trace!("Cleaning up tempdir used to link to nix-store: {}", res_dir);
             let sys_td = std::env::temp_dir();
             assert!(std::fs::exists(&sys_td).unwrap());
             assert!(res_dir.starts_with(sys_td));
@@ -100,6 +99,20 @@ impl BuildSubComms {
         }
 
         Ok(())
+    }
+
+    /// Builds the configuration, and returns the link to the nix store repo. The `bool` tag
+    /// indicates if the link is placed in a temp-dir.
+    fn build_configuration(&self, args: AllArgs) -> io::Result<(Utf8PathBuf, bool)> {
+        let use_td = args.res_dir.is_none();
+        let full_flake = args.flake.init_flake_ref(self)?;
+        let res_dir = args.res_dir.unwrap_or(
+            Utf8PathBuf::from_path_buf(TempDir::new("nixrsbuild-")?.into_path()).unwrap(),
+        );
+        log::trace!("Result link directory: {}", res_dir);
+        full_flake
+            .run_nix_build(res_dir.as_path())
+            .map(|_| (res_dir, use_td))
     }
 }
 

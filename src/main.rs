@@ -41,6 +41,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let cli = initial_init()?;
 
     match cli {
+        // We only have list-generations util running for now
         SubCommand::Util {
             task: UtilSubCommand::ListGenerations { json },
         } => {
@@ -48,6 +49,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             println!("{:#?}", gens_iter.collect::<BTreeMap<_, _>>());
             Ok(())
         }
+        // I've only tried out build, test, switch, boot.
         SubCommand::Builders { task, arg } => Ok(task.run_build(arg)?),
         SubCommand::Util { task } => unimplemented!("todo: implement {:?}", task),
     }
