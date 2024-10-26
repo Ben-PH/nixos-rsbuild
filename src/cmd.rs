@@ -84,59 +84,71 @@ pub enum UtilSubCommand {
 #[derive(Args, Debug)]
 #[allow(clippy::struct_excessive_bools)]
 pub struct AllArgs {
-    /// upgrade root-users "nixos" channel, and channels containing `.update-on-nixos-rebuild`
-    /// marker file in base-dir
-    #[clap(long)]
-    pub upgrade: bool,
-    /// --upgrade, but ALL of root-users channels
-    #[clap(long)]
-    #[arg(conflicts_with("upgrade"))]
-    pub upgrade_all: bool,
-    /// (Re)Installs boot loader to device specified by relevant config options.
-    #[clap(long)]
-    pub install_bootloader: bool,
-    /// Uses currently installed version of Nix.
-    ///
-    /// Normal behavior is to first build the `nixUnstable` attribute in `Nix-pkgs`, and use that.
-    /// This is required when ``NixOS`` modules use features not provided by the currently installed
-    /// version of Nix.
-    #[clap(long, short)]
-    pub no_build_nix: bool,
+    // #[clap(long)]
+    // /// Unimplemented
+    // ///
+    // /// upgrade root-users "nixos" channel, and channels containing `.update-on-nixos-rebuild`
+    // /// marker file in base-dir
+    // pub upgrade: bool,
+    
+    // #[clap(long)]
+    // #[arg(conflicts_with("upgrade"))]
+    // /// Unimplemented
+    // ///
+    // /// --upgrade, but ALL of root-users channels
+    // pub upgrade_all: bool,
 
-    /// TODO: if both flake and no-flake are unset, set flake to /etc/nixos/flake.nix, but only if
-    /// that file exists...
+    // #[clap(long)]
+    // /// (Re)Installs boot loader to device specified by relevant config options.
+    // pub install_bootloader: bool,
+
+    // #[clap(long, short)]
+    // /// Uses currently installed version of Nix.
+    // ///
+    // /// Normal behavior is to first build the `nixUnstable` attribute in `Nix-pkgs`, and use that.
+    // /// This is required when ``NixOS`` modules use features not provided by the currently installed
+    // /// version of Nix.
+    // pub no_build_nix: bool,
+
+    
     #[clap(long, conflicts_with_all(["file", "attr", "no_flake"]))]
     #[arg(value_parser = parsers::flake_parse, default_value_t = FlakeRefInput::try_default().unwrap())]
     pub flake: FlakeRefInput,
-    #[clap(long)]
-    pub no_flake: bool,
 
-    /// Used to select an attrubite other than the default
-    #[clap(long)]
-    pub attr: Option<String>,
-    #[clap(long)]
+    // #[clap(long)]
+    // pub no_flake: bool,
+
+    // #[clap(long)]
+    // /// Used to select an attrubite other than the default
+    // pub attr: Option<String>,
+
+    // #[clap(long)]
     /// For this build, sets the input file.
     pub res_dir: Option<Utf8PathBuf>,
-    // whet `--target-host` or `--build-host`, make this one availabel
+
     // #[clap(long, short = 's')]
+    // when `--target-host` or `--build-host`, make this one availabel
     // use_substitutes: bool,
-    // todo: parse as valid nix file
+
     #[clap(long)]
     #[arg(value_parser = nix_file_exists)]
     /// For this build, sets the input file.
     pub file: Option<Utf8PathBuf>,
-    #[clap(long = "profile_name")]
-    #[arg(default_value_t = Utf8PathBuf::from(String::from("/nix/var/nix/profiles/system")), value_parser = parsers::profile_name_parse)]
-    //Utf8PathBuf::from_path_buf(PathBuf::from("/nix/var/nix/profiles/system")).unwrap())]
-    /// For this build, sets profile directory to `/nix/var/nix/profiles/system-profiles/$profile-name`
-    pub profile_path: Utf8PathBuf,
-    #[clap(long)]
+
+    // #[clap(long = "profile_name")]
+    // #[arg(default_value_t = Utf8PathBuf::from(String::from("/nix/var/nix/profiles/system")), value_parser = parsers::profile_name_parse)]
+    // /// For this build, sets profile directory to `/nix/var/nix/profiles/system-profiles/$profile-name`
+    // pub profile_path: Utf8PathBuf,
+
+    // #[clap(long)]
     // #[arg(conflicts_with_all(["no_build_nix", "flake", "no_flake", "attr", "file"]))]
     // pub rollback: bool,
-    #[clap(long)]
-    pub build_host: bool,
-    #[clap(long)]
-    pub fast: bool,
+
+    // #[clap(long)]
+    // pub build_host: bool,
+
+    // #[clap(long)]
+    // pub fast: bool,
 }
 
 fn nix_file_exists(path: &str) -> io::Result<Utf8PathBuf> {
