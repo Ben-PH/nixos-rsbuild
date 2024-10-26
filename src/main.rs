@@ -49,31 +49,31 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     // plain flake build
     if let SubCommand::Builders { task, arg } = cli {
-        log::trace!("getting full flake");
+        log::trace!("Constructing configuration");
         let use_td = arg.res_dir.is_none();
         let full_flake = arg.flake.init_flake_ref(&task)?;
         let res_dir = arg.res_dir.unwrap_or(
             Utf8PathBuf::from_path_buf(TempDir::new("nixrsbuild-")?.into_path()).unwrap(),
         );
+        log::trace!("Result link directory: {}", res_dir);
 
         full_flake.run_nix_build(res_dir.as_path())?;
-
-        match task {
+        if matches!(
+            task,
             BuildSubComms::Switch
-            | BuildSubComms::Boot
-            | BuildSubComms::Test
-            | BuildSubComms::DryActivate => {
-                let switch_bin = res_dir.join("result/bin/switch-to-configuration");
-                let out_link = std::fs::canonicalize(switch_bin).unwrap();
+                | BuildSubComms::Boot
+                | BuildSubComms::Test
+                | BuildSubComms::DryActivate
+        ) {
+            let switch_bin = res_dir.join("result/bin/switch-to-configuration");
+            let out_link = std::fs::canonicalize(switch_bin).unwrap();
 
-                let local_arch = std::env::var_os("LOCALE_ARCHIVE").unwrap_or_default();
-                let task_str = task.to_string();
-                cmd_lib::spawn!(
-                    sudo nu -c "env -i LOCALE_ARCHIVE=$local_arch $out_link $task_str"
-                )?
-                .wait();
-            }
-            _ => unimplemented!("Builders task not yet implemented: {}", task),
+            let local_arch = std::env::var_os("LOCALE_ARCHIVE").unwrap_or_default();
+            let task_str = task.to_string();
+            cmd_lib::spawn!(
+                sudo nu -c "env -i LOCALE_ARCHIVE=$local_arch $out_link $task_str"
+            )?
+            .wait();
         }
 
         if use_td {
