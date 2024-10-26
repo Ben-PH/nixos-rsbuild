@@ -1,15 +1,33 @@
 use std::io::{self, ErrorKind};
 
-use camino::{Utf8Path, Utf8PathBuf};
+use camino::Utf8PathBuf;
 use clap::{Args, Parser, Subcommand};
 
 use crate::flake::FlakeRefInput;
+
+mod parsers;
+mod stashed;
 
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
 pub struct Cli {
     #[command(subcommand)]
     pub command: SubCommand,
+}
+
+// TODO: split build and non-build commands
+#[derive(Subcommand, Debug)]
+pub enum SubCommand {
+    Builders {
+        #[command(subcommand)]
+        task: BuildSubComms,
+        #[clap(flatten)]
+        arg: AllArgs,
+    },
+    Util {
+        #[command(subcommand)]
+        task: UtilSubCommand,
+    },
 }
 
 /// Commands that involve building: switch, test, boot, etc..
@@ -57,30 +75,6 @@ pub enum UtilSubCommand {
     },
 }
 
-// TODO: split build and non-build commands
-#[derive(Subcommand, Debug)]
-pub enum SubCommand {
-    Builders {
-        #[command(subcommand)]
-        task: BuildSubComms,
-        #[clap(flatten)]
-        arg: AllArgs,
-    },
-    Util {
-        #[command(subcommand)]
-        task: UtilSubCommand,
-    },
-}
-
-#[derive(Args, Debug)]
-pub struct RbFlag {
-    #[clap(long)]
-    rollback: bool,
-}
-#[derive(Args, Debug)]
-struct SpecArg {
-    specialisation: Option<String>,
-}
 #[derive(Args, Debug)]
 #[allow(clippy::struct_excessive_bools)]
 pub struct AllArgs {
@@ -106,7 +100,7 @@ pub struct AllArgs {
     /// TODO: if both flake and no-flake are unset, set flake to /etc/nixos/flake.nix, but only if
     /// that file exists...
     #[clap(long, conflicts_with_all(["file", "attr", "no_flake"]))]
-    #[arg(value_parser = flake_parse, default_value_t = FlakeRefInput::try_default().unwrap())]
+    #[arg(value_parser = parsers::flake_parse, default_value_t = FlakeRefInput::try_default().unwrap())]
     pub flake: FlakeRefInput,
     #[clap(long)]
     pub no_flake: bool,
@@ -122,11 +116,11 @@ pub struct AllArgs {
     // use_substitutes: bool,
     // todo: parse as valid nix file
     #[clap(long)]
-    #[arg(value_parser = file_exists)]
+    #[arg(value_parser = nix_file_exists)]
     /// For this build, sets the input file.
     pub file: Option<Utf8PathBuf>,
     #[clap(long = "profile_name")]
-    #[arg(default_value_t = Utf8PathBuf::from(String::from("/nix/var/nix/profiles/system")), value_parser = profile_name_parse)]
+    #[arg(default_value_t = Utf8PathBuf::from(String::from("/nix/var/nix/profiles/system")), value_parser = parsers::profile_name_parse)]
     //Utf8PathBuf::from_path_buf(PathBuf::from("/nix/var/nix/profiles/system")).unwrap())]
     /// For this build, sets profile directory to `/nix/var/nix/profiles/system-profiles/$profile-name`
     pub profile_path: Utf8PathBuf,
@@ -139,46 +133,7 @@ pub struct AllArgs {
     pub fast: bool,
 }
 
-// TODO: this is needed for bringing in a value parser. if you can access `try_from` directly, do
-// that instead
-fn flake_parse(val: &str) -> Result<FlakeRefInput, String> {
-    FlakeRefInput::try_from(val)
-}
-
-#[derive(Args, Debug)]
-#[allow(clippy::struct_excessive_bools)]
-struct FlakeBuildArgs {
-    #[clap(long)]
-    recreate_lock_file: bool,
-    #[clap(long)]
-    no_update_lock_file: bool,
-    #[clap(long)]
-    no_write_lock_file: bool,
-    #[clap(long)]
-    no_registries: bool,
-    #[clap(long)]
-    commit_lock_file: bool,
-    #[clap(long)]
-    update_input: Option<String>,
-    #[clap(long)]
-    #[arg(num_args(2))]
-    override_input: Option<String>,
-    #[clap(long)]
-    impure: bool,
-}
-
-impl AllArgs {
-    pub fn building_attribute(&self) -> bool {
-        self.file.is_some() || self.attr.is_some()
-    }
-}
-
-#[allow(clippy::unnecessary_wraps, reason = "result needed for parser")]
-fn profile_name_parse(prof_name: &str) -> Result<Utf8PathBuf, String> {
-    Ok(Utf8Path::new("/nix/var/nix/profiles/system-profiles").join(prof_name))
-}
-
-fn file_exists(path: &str) -> io::Result<Utf8PathBuf> {
+fn nix_file_exists(path: &str) -> io::Result<Utf8PathBuf> {
     let path = Utf8PathBuf::from(path);
     if !path.exists() {
         return Err(io::Error::new(
@@ -199,25 +154,4 @@ fn file_exists(path: &str) -> io::Result<Utf8PathBuf> {
         ));
     }
     Ok(path)
-}
-
-impl SubCommand {
-    /// all but list-gens contains `AllArgs`.
-    /// If this is already known not to be a ``ListGenerations`` run, you can unwrap this no problem.
-    /// ...And that should be a flag to clean up the arg architecture, no?
-    pub fn inner_args(&self) -> Option<&AllArgs> {
-        match self {
-            SubCommand::Builders { arg, .. } => Some(arg),
-            _ => None,
-        }
-    }
-    pub fn building_attr(&self) -> bool {
-        self.inner_args().is_some_and(AllArgs::building_attribute)
-    }
-    // pub fn can_run(&self) -> bool {
-    //     matches!(
-    //         self,
-    //         Self::Switch { .. } | Self::Boot { .. } | Self::Test { .. }
-    //     )
-    // }
 }
